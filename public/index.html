@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RankJenk.com - #1 Source For Premium Jenkem!!!</title>
+<meta name="description" content="RankJenk.com. A parody shopping site. Nothing is for sale. Jenkem is an internet hoax.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="splash">
+  <div class="splash-box">
+    <h1 class="rainbow">RankJenk.com</h1>
+    <p>Loading awesome content... <span id="splash-pct">0</span>%</p>
+    <div class="bar"><div id="splash-bar"></div></div>
+    <p class="tiny">Please enable Flash Player 10.1 for the full experience</p>
+    <button id="splash-enter" class="btn" hidden>CLICK HERE TO ENTER</button>
+    <p><a href="#" id="splash-skip">Skip Intro &gt;&gt;</a></p>
+  </div>
+</div>
+
+<div id="topbar">
+  <a href="#" id="fav">&#9733; Add to Favorites</a> |
+  <a href="#" id="homepage">Make RankJenk your homepage!</a> |
+  <span id="clock"></span>
+</div>
+
+<header>
+  <div class="logo-wrap">
+    <span class="spin-badge">NEW!</span>
+    <h1 class="logo">Rank<span>Jenk</span><small>.com</small></h1>
+    <span class="spin-badge right">HOT!</span>
+  </div>
+  <p class="tagline">Your <b>#1</b> Source For Premium Jenkem Since 2009<a href="#about">*</a></p>
+  <div class="marquee"><span>
+    *** FREE SHIPPING ON ORDERS OVER $0.00 *** NOW ACCEPTING IMAGINARY MONEY *** WE ARE NOT RESPONSIBLE FOR ANYTHING *** RANKED #1 BY OUR MOM *** CLICK THE BANNER TO WIN A FREE iPOD *** SITE LAST UPDATED 3/14/2011 ***
+  </span></div>
+</header>
+
+<nav>
+  <a class="btn" href="#shop">HOME</a>
+  <a class="btn" href="#shop">SHOP</a>
+  <a class="btn" href="#top10">TOP 10</a>
+  <a class="btn" href="#reviews">REVIEWS</a>
+  <a class="btn" href="recipes.html">RECIPES</a>
+  <a class="btn" href="#board">BOARD</a>
+  <a class="btn" href="#about">ABOUT</a>
+  <a class="btn cart-btn" href="#" id="cart-open">&#128722; CART (<span id="cart-count">0</span>)</a>
+</nav>
+
+<div class="construction"><span class="blink">&#9888;</span> THIS SITE IS UNDER CONSTRUCTION <span class="blink">&#9888;</span> (it has been since 2009)</div>
+
+<div id="layout">
+
+  <aside class="left">
+    <div class="box">
+      <h3>MEMBER LOGIN</h3>
+      <form id="login">
+        <div id="account-guest">
+          <label for="u">Username:</label><input id="u" type="text" autocomplete="username" maxlength="16">
+          <label for="p">Password:</label><input id="p" type="password" autocomplete="current-password" maxlength="100">
+          <button class="btn small" id="login-btn" type="submit">LOGIN</button>
+          <p class="tiny"><a href="#" id="register-open">Register FREE!</a></p>
+        </div>
+        <div id="account-user" hidden>
+          <p>Welcome back,<br><b id="whoami"></b>!</p>
+          <p class="tiny">You have <b>0</b> new messages and <b>0</b> friends.</p>
+          <button class="btn small" id="logout-btn" type="button">LOGOUT</button>
+        </div>
+        <p id="login-msg" class="tiny err"></p>
+      </form>
+      <p class="tiny">Members: <b id="member-count">?</b></p>
+    </div>
+
+    <div class="box">
+      <h3>DEPARTMENTS</h3>
+      <ul class="menu">
+        <li><a href="#shop">Original Recipes*</a></li>
+        <li><a href="#shop">Limited Editions</a></li>
+        <li><a href="#shop">Gift Sets</a></li>
+        <li><a href="#shop">Clearance!!!</a></li>
+        <li><a href="#shop">Things We Made Up</a></li>
+        <li><a href="#shop">Seasonal</a></li>
+      </ul>
+    </div>
+
+    <div class="box center">
+      <h3>VISITOR COUNTER</h3>
+      <div id="counter" class="counter">000000</div>
+      <p class="tiny">You are visitor number <span id="counter-text"></span></p>
+    </div>
+
+    <div class="box center">
+      <h3>SITE POLL</h3>
+      <p class="tiny">Best part of RankJenk?</p>
+      <label class="poll"><input type="radio" name="poll"> The prices</label>
+      <label class="poll"><input type="radio" name="poll"> The vibes</label>
+      <label class="poll"><input type="radio" name="poll"> Is this legal</label>
+      <button class="btn small" id="poll-btn">VOTE</button>
+      <p class="tiny" id="poll-msg"></p>
+    </div>
+
+    <div class="box center">
+      <div class="badge">&#10004; 100% SECURE*<br><span class="tiny">*not verified by anyone</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <section class="box welcome">
+      <h2 class="rainbow">~*~ Welcome To RankJenk!!! ~*~</h2>
+      <p>Hello and welcome, fellow shopper! You have found the <b>internet's #1 rated</b> online store for jenkem. Browse our huge selection, read the reviews, and <span class="blink">vote for your favorites</span> on the leaderboard.</p>
+      <p class="tiny"><b>Reminder:</b> this is a joke. Nothing here is real, nothing is for sale, and no payment is taken. Jenkem is an old internet hoax. Please do not huff anything.</p>
+    </section>
+
+    <section id="shop" class="box">
+      <h2>FEATURED PRODUCTS</h2>
+      <div id="products" class="products"></div>
+    </section>
+
+    <section id="top10" class="box">
+      <h2>&#127942; TOP 10 JENKS OF THE WEEK</h2>
+      <p class="tiny">Vote to change the rankings! (Your votes are not saved anywhere. Nobody cares.)</p>
+      <ol id="ranking" class="ranking"></ol>
+    </section>
+
+    <section id="reviews" class="box">
+      <h2>CUSTOMER REVIEWS</h2>
+      <div id="review-list"></div>
+    </section>
+
+    <section id="board" class="box">
+      <h2>MESSAGE BOARD</h2>
+      <p class="tiny" id="board-hint">Login or register to post. Be nice. Or don't. We are not your mom.</p>
+      <form id="board-form" hidden>
+        <label for="board-msg">Message:</label>
+        <input id="board-msg" type="text" maxlength="280">
+        <button class="btn small" id="board-btn" type="submit">POST</button>
+      </form>
+      <p id="board-err" class="err tiny"></p>
+      <p class="tiny"><button class="btn small" id="board-refresh" type="button">REFRESH</button> <span id="board-status"></span></p>
+      <div id="board-list"></div>
+    </section>
+
+    <section id="about" class="box">
+      <h2>ABOUT US</h2>
+      <p>*RankJenk.com is a parody website. Jenkem is an urban legend and internet hoax, and no such product is sold here. There is no store, no inventory, and no payment system. The cart is decoration. Accounts and message board posts are real, so do not reuse a password from anywhere else. Everything on this page is an exaggerated joke about the way weird websites looked in the early 2010s.</p>
+    </section>
+  </main>
+
+  <aside class="right">
+    <div class="ad ad1"><b>CONGRATULATIONS!</b><br>You are the 1,000,000th visitor!<br><span class="blink">CLICK HERE</span></div>
+    <a class="ad ad-yt" href="https://www.youtube.com/watch?v=ENV_eoBQNS8" target="_blank" rel="noopener">
+      <span class="ad-tag">AD</span>
+      <img src="https://i.ytimg.com/vi/ENV_eoBQNS8/mqdefault.jpg" alt="" loading="lazy">
+      <b>MOM GET OUT OF MY ROOM IM PLAYING COD!!!</b><br><span class="blink">WATCH NOW!!!</span>
+    </a>
+    <div class="box center">
+      <h3>TODAY'S FORECAST</h3>
+      <div class="big">&#9729;</div>
+      <p class="tiny">Chance of rank: <b>87%</b></p>
+    </div>
+    <div class="ad ad3"><b>DOWNLOAD MORE RAM</b><br>100% FREE<br><span class="tiny">No viruses*</span></div>
+    <div class="box center">
+      <h3>WEB RING</h3>
+      <p class="tiny">&lt;&lt; <a href="#">prev</a> | <a href="#">random</a> | <a href="#">next</a> &gt;&gt;</p>
+      <p class="tiny">You are on site 4 of 4</p>
+    </div>
+    <a class="ad ad-yt" href="https://www.youtube.com/watch?v=OC2AtGZBTAo" target="_blank" rel="noopener">
+      <span class="ad-tag">AD</span>
+      <img src="https://i.ytimg.com/vi/OC2AtGZBTAo/mqdefault.jpg" alt="" loading="lazy">
+      <b>WORKING Invisible Torso Glitch AFTER PATCH 1.72</b><br><span class="blink">CLICK TO PLAY</span>
+    </a>
+    <a class="ad ad-yt" href="https://www.youtube.com/watch?v=bpnkh50IXek" target="_blank" rel="noopener">
+      <span class="ad-tag">AD</span>
+      <img src="https://i.ytimg.com/vi/bpnkh50IXek/mqdefault.jpg" alt="" loading="lazy">
+      <b>CRAZY 1 TAP</b><br><span class="blink">FREE VIDEO!!!</span>
+    </a>
+  </aside>
+
+</div>
+
+<footer>
+  <p><span class="blink">&#9733;</span> Best viewed in Internet Explorer 8 at 1024x768 <span class="blink">&#9733;</span></p>
+  <p>Get Flash Player | Get Silverlight | Get Java | Get a better monitor</p>
+  <p class="socials">
+    <a href="https://twitch.tv/unlicensedpharmacist" target="_blank" rel="noopener">twitch.tv/unlicensedpharmacist</a> |
+    <a href="https://kick.com/unlicensedpharmacist" target="_blank" rel="noopener">kick.com/unlicensedpharmacist</a> |
+    <a href="https://youtube.com/roostercs" target="_blank" rel="noopener">youtube.com/roostercs</a>
+  </p>
+  <p class="tiny">&copy; 2009-2011 RankJenk.com. All rights reserved. All wrongs reserved too. This is a parody and nothing here is for sale.</p>
+</footer>
+
+<div id="cart-modal" class="modal" hidden>
+  <div class="modal-box">
+    <button class="x" id="cart-close">X</button>
+    <h2>YOUR SHOPPING CART</h2>
+    <div id="cart-items"></div>
+    <div class="coupon">
+      <label for="coupon">Promo code:</label>
+      <input id="coupon" type="text" maxlength="20">
+      <button class="btn small" id="coupon-btn" type="button">APPLY</button>
+    </div>
+    <p id="coupon-msg" class="tiny"></p>
+    <p class="total">TOTAL: <b id="cart-total">$0.00</b></p>
+    <button class="btn" id="checkout">CHECKOUT</button>
+    <p id="checkout-msg" class="err"></p>
+  </div>
+</div>
+
+<div id="register-modal" class="modal" hidden>
+  <div class="modal-box">
+    <button class="x" id="register-close" type="button">X</button>
+    <h2>JOIN RANKJENK!!!</h2>
+    <form id="register-form" class="reg">
+      <label for="r-user">Pick a username:</label>
+      <input id="r-user" type="text" maxlength="16" autocomplete="username">
+      <label for="r-pass">Password:</label>
+      <input id="r-pass" type="password" maxlength="100" autocomplete="new-password">
+      <label for="r-pass2">Type it again:</label>
+      <input id="r-pass2" type="password" maxlength="100" autocomplete="new-password">
+      <label class="poll"><input id="r-joke" type="checkbox"> I understand this is a joke site</label>
+      <button class="btn" id="register-btn" type="submit">REGISTER</button>
+      <p id="register-msg" class="err"></p>
+      <p class="tiny">3-16 letters, numbers, _ or -. Password 6+ characters. Do not reuse a real password.</p>
+    </form>
+  </div>
+</div>
+
+<div id="code-popup" class="modal" hidden>
+  <div class="modal-box code-box">
+    <button class="x" id="code-close" type="button">X</button>
+    <div class="code-burst">
+      <p class="code-small">LIMITED TIME OFFER!!!</p>
+      <h2 class="code-big">Use Code <span>"Sniffin"</span> for <span>10% off</span> your first order!</h2>
+      <button class="btn big-btn" id="code-apply" type="button">APPLY CODE TO MY CART</button>
+      <p class="tiny" id="code-msg">Offer ends never. Nothing can actually be ordered.</p>
+    </div>
+  </div>
+</div>
+
+<div id="popup" class="modal" hidden>
+  <div class="modal-box popup-box">
+    <button class="x dodge" id="popup-close">X</button>
+    <h2 class="rainbow">WINNER!!!</h2>
+    <p>You are the <b>1,000,000th visitor</b> to RankJenk.com!</p>
+    <p>You have won a <b>FREE iPOD</b>*</p>
+    <button class="btn" id="popup-claim">CLAIM NOW</button>
+    <p id="popup-msg" class="tiny">*prize does not exist</p>
+  </div>
+</div>
+
+<div id="social-popup" class="modal" hidden>
+  <div class="modal-box popup-box social-box">
+    <button class="x" id="social-close" type="button">X</button>
+    <h2 class="rainbow">HEY YOU!</h2>
+    <p class="social-line">if you're reading this you probably lost to me on overwatch</p>
+    <p class="tiny">Find me here:</p>
+    <div class="social-links">
+      <a class="btn" href="https://twitch.tv/unlicensedpharmacist" target="_blank" rel="noopener">TWITCH</a>
+      <a class="btn" href="https://kick.com/unlicensedpharmacist" target="_blank" rel="noopener">KICK</a>
+      <a class="btn" href="https://youtube.com/roostercs" target="_blank" rel="noopener">YOUTUBE</a>
+    </div>
+    <p class="tiny">twitch.tv/unlicensedpharmacist<br>kick.com/unlicensedpharmacist<br>youtube.com/roostercs</p>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
