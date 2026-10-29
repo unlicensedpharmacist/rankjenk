@@ -4,11 +4,18 @@ const GUEST_RE = /^[A-Za-z0-9 _-]{1,20}$/;
 const COOKIE = "rj_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const PBKDF2_ITERATIONS = 25000;
+const OWNER_NAME = "pharmacist";
+const RESERVED = ["owner", "admin", "administrator", "mod", "moderator", "staff", "official"];
+const CATEGORIES = ["General", "Product Reviews", "Recipes", "Gaming", "Off Topic"];
 
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_lower TEXT NOT NULL UNIQUE, pass TEXT NOT NULL, created INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT NOT NULL, body TEXT NOT NULL, ip TEXT NOT NULL, created INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS threads (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, ip TEXT NOT NULL, created INTEGER NOT NULL, last_activity INTEGER NOT NULL, replies INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS replies (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER NOT NULL, user_id INTEGER, name TEXT NOT NULL, body TEXT NOT NULL, ip TEXT NOT NULL, created INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS idx_threads_activity ON threads (last_activity)",
+  "CREATE INDEX IF NOT EXISTS idx_replies_thread ON replies (thread_id)",
 ];
 
 let schemaReady = null;
@@ -51,6 +58,10 @@ function json(data, status = 200, cookie) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+function publicUser(u) {
+  return { name: u.name, owner: u.name.toLowerCase() === OWNER_NAME };
+}
+
 function readToken(request) {
   const m = (request.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + COOKIE + "=([a-f0-9]+)"));
   return m ? m[1] : null;
@@ -74,8 +85,49 @@ async function currentUser(request, db) {
     .first();
 }
 
+const oneLine = (s, max) => {
+  const v = String(s || "").replace(/\s+/g, " ").trim();
+  return v.length >= 1 && v.length <= max ? v : null;
+};
+const multiLine = (s, max) => {
+  const v = String(s || "").replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return v.length >= 1 && v.length <= max ? v : null;
+};
+const hasLink = (s) => /https?:\/\/|www\./i.test(s);
+const flags = (r) => ({ ...r, guest: !!r.guest, owner: !!r.owner });
+
+async function resolveAuthor(request, db, body) {
+  const user = await currentUser(request, db);
+  if (user) return { user, name: user.name };
+  const name = oneLine(body.name, 20);
+  if (!name || !GUEST_RE.test(name)) {
+    return { error: json({ error: "Pick a name: 1-20 letters, numbers, spaces, _ or -." }, 400) };
+  }
+  const lower = name.toLowerCase();
+  if (RESERVED.includes(lower) || lower === OWNER_NAME) {
+    return { error: json({ error: "That name is reserved. Pick another." }, 409) };
+  }
+  const taken = await db.prepare("SELECT 1 AS x FROM users WHERE name_lower = ?").bind(lower).first();
+  if (taken) return { error: json({ error: "That name belongs to a member. Pick another." }, 409) };
+  return { user: null, name };
+}
+
+const ipHash = (request) => sha256("rj:" + (request.headers.get("cf-connecting-ip") || "unknown"));
+
+async function rateLimited(db, ip, t) {
+  const all = "SELECT created, ip FROM comments UNION ALL SELECT created, ip FROM threads UNION ALL SELECT created, ip FROM replies";
+  const row = await db
+    .prepare(`SELECT MAX(created) AS last, SUM(created > ?2) AS hour FROM (${all}) WHERE ip = ?1`)
+    .bind(ip, t - 3600)
+    .first();
+  if (row && row.last && t - row.last < 10) return json({ error: "Slow down! One post every 10 seconds." }, 429);
+  if (row && row.hour >= 30) return json({ error: "That's a lot of posts. Try again in a while." }, 429);
+  return null;
+}
+
 async function handleApi(request, env) {
-  const route = new URL(request.url).pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
+  const url = new URL(request.url);
+  const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const method = request.method;
 
   if (route === "whoami" && method === "GET") {
@@ -109,13 +161,14 @@ async function handleApi(request, env) {
 
     if (route === "me" && method === "GET") {
       const user = await currentUser(request, db);
-      return json({ user: user ? { name: user.name } : null });
+      return json({ user: user ? publicUser(user) : null });
     }
 
     if (route === "register" && method === "POST") {
       const name = String(body.username || "").trim();
       const password = String(body.password || "");
       if (!NAME_RE.test(name)) return json({ error: "Username must be 3-16 letters, numbers, _ or -." }, 400);
+      if (RESERVED.includes(name.toLowerCase())) return json({ error: "That username is reserved." }, 400);
       if (password.length < 6 || password.length > 100) return json({ error: "Password must be 6-100 characters." }, 400);
       let id;
       try {
@@ -130,7 +183,7 @@ async function handleApi(request, env) {
         }
         throw e;
       }
-      return json({ user: { name } }, 201, await startSession(db, id));
+      return json({ user: publicUser({ name }) }, 201, await startSession(db, id));
     }
 
     if (route === "login" && method === "POST") {
@@ -143,7 +196,7 @@ async function handleApi(request, env) {
       const ok = rec ? await checkPassword(password, rec.pass) : (await hashPassword(password), false);
       if (!ok) return json({ error: "Wrong username or password." }, 401);
       await db.prepare("DELETE FROM sessions WHERE expires < ?").bind(now()).run();
-      return json({ user: { name: rec.name } }, 200, await startSession(db, rec.id));
+      return json({ user: publicUser(rec) }, 200, await startSession(db, rec.id));
     }
 
     if (route === "logout" && method === "POST") {
@@ -154,45 +207,132 @@ async function handleApi(request, env) {
 
     if (route === "comments" && method === "GET") {
       const [comments, count] = await db.batch([
-        db.prepare(
-          "SELECT id, name, body, created, (user_id IS NULL) AS guest FROM comments ORDER BY id DESC LIMIT 50"
-        ),
+        db
+          .prepare(
+            "SELECT c.id, c.name, c.body, c.created, (c.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM comments c LEFT JOIN users u ON u.id = c.user_id ORDER BY c.id DESC LIMIT 50"
+          )
+          .bind(OWNER_NAME),
         db.prepare("SELECT COUNT(*) AS n FROM users"),
       ]);
-      return json({
-        posts: comments.results.map((c) => ({ ...c, guest: !!c.guest })),
-        members: count.results[0].n,
-      });
+      return json({ posts: comments.results.map(flags), members: count.results[0].n });
     }
 
     if (route === "comments" && method === "POST") {
-      const user = await currentUser(request, db);
-      const text = String(body.message || "").replace(/\s+/g, " ").trim();
-      if (!text || text.length > 280) return json({ error: "Comments must be 1-280 characters." }, 400);
-      if (/https?:\/\/|www\./i.test(text)) return json({ error: "No links please." }, 400);
-
-      let name;
-      if (user) {
-        name = user.name;
-      } else {
-        name = String(body.name || "").replace(/\s+/g, " ").trim();
-        if (!GUEST_RE.test(name)) return json({ error: "Pick a name: 1-20 letters, numbers, spaces, _ or -." }, 400);
-        const taken = await db.prepare("SELECT 1 AS x FROM users WHERE name_lower = ?").bind(name.toLowerCase()).first();
-        if (taken) return json({ error: "That name belongs to a member. Pick another." }, 409);
-      }
-
-      const ip = await sha256("rj:" + (request.headers.get("cf-connecting-ip") || "unknown"));
+      const text = oneLine(body.message, 280);
+      if (!text) return json({ error: "Comments must be 1-280 characters." }, 400);
+      if (hasLink(text)) return json({ error: "No links please." }, 400);
+      const author = await resolveAuthor(request, db, body);
+      if (author.error) return author.error;
+      const ip = await ipHash(request);
       const t = now();
-      const last = await db.prepare("SELECT created FROM comments WHERE ip = ? ORDER BY id DESC LIMIT 1").bind(ip).first();
-      if (last && t - last.created < 10) return json({ error: "Slow down! One comment every 10 seconds." }, 429);
-      const hour = await db.prepare("SELECT COUNT(*) AS n FROM comments WHERE ip = ? AND created > ?").bind(ip, t - 3600).first();
-      if (hour.n >= 20) return json({ error: "That's a lot of comments. Try again in a while." }, 429);
-
+      const limited = await rateLimited(db, ip, t);
+      if (limited) return limited;
       await db
         .prepare("INSERT INTO comments (user_id, name, body, ip, created) VALUES (?, ?, ?, ?, ?)")
-        .bind(user ? user.id : null, name, text, ip, t)
+        .bind(author.user ? author.user.id : null, author.name, text, ip, t)
         .run();
       return json({ ok: true }, 201);
+    }
+
+    if (route === "threads" && method === "GET") {
+      const cat = url.searchParams.get("cat");
+      const filtered = CATEGORIES.includes(cat);
+      const stmt = db.prepare(
+        "SELECT t.id, t.title, t.category, t.name, t.created, t.last_activity, t.replies, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM threads t LEFT JOIN users u ON u.id = t.user_id " +
+          (filtered ? "WHERE t.category = ? " : "") +
+          "ORDER BY t.last_activity DESC LIMIT 40"
+      );
+      const res = await (filtered ? stmt.bind(OWNER_NAME, cat) : stmt.bind(OWNER_NAME)).all();
+      return json({ threads: res.results.map(flags) });
+    }
+
+    if (route === "thread" && method === "GET") {
+      const id = Number(url.searchParams.get("id"));
+      if (!Number.isInteger(id)) return json({ error: "Not found." }, 404);
+      const [t, r] = await db.batch([
+        db
+          .prepare(
+            "SELECT t.id, t.title, t.category, t.name, t.body, t.created, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM threads t LEFT JOIN users u ON u.id = t.user_id WHERE t.id = ?"
+          )
+          .bind(OWNER_NAME, id),
+        db
+          .prepare(
+            "SELECT r.id, r.name, r.body, r.created, (r.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM replies r LEFT JOIN users u ON u.id = r.user_id WHERE r.thread_id = ? ORDER BY r.id ASC LIMIT 300"
+          )
+          .bind(OWNER_NAME, id),
+      ]);
+      if (!t.results.length) return json({ error: "That thread does not exist." }, 404);
+      return json({ thread: flags(t.results[0]), replies: r.results.map(flags) });
+    }
+
+    if (route === "threads" && method === "POST") {
+      const title = oneLine(body.title, 80);
+      const text = multiLine(body.message, 1000);
+      if (!title || title.length < 3) return json({ error: "Title must be 3-80 characters." }, 400);
+      if (!text) return json({ error: "Message must be 1-1000 characters." }, 400);
+      if (!CATEGORIES.includes(body.category)) return json({ error: "Pick a category." }, 400);
+      if (hasLink(title) || hasLink(text)) return json({ error: "No links please." }, 400);
+      const author = await resolveAuthor(request, db, body);
+      if (author.error) return author.error;
+      const ip = await ipHash(request);
+      const t = now();
+      const limited = await rateLimited(db, ip, t);
+      if (limited) return limited;
+      const result = await db
+        .prepare(
+          "INSERT INTO threads (user_id, name, category, title, body, ip, created, last_activity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(author.user ? author.user.id : null, author.name, body.category, title, text, ip, t, t)
+        .run();
+      return json({ ok: true, id: result.meta.last_row_id }, 201);
+    }
+
+    if (route === "replies" && method === "POST") {
+      const threadId = Number(body.thread_id);
+      const text = multiLine(body.message, 1000);
+      if (!Number.isInteger(threadId) || !text) return json({ error: "Replies must be 1-1000 characters." }, 400);
+      if (hasLink(text)) return json({ error: "No links please." }, 400);
+      const thread = await db.prepare("SELECT id FROM threads WHERE id = ?").bind(threadId).first();
+      if (!thread) return json({ error: "That thread does not exist." }, 404);
+      const author = await resolveAuthor(request, db, body);
+      if (author.error) return author.error;
+      const ip = await ipHash(request);
+      const t = now();
+      const limited = await rateLimited(db, ip, t);
+      if (limited) return limited;
+      await db.batch([
+        db
+          .prepare("INSERT INTO replies (thread_id, user_id, name, body, ip, created) VALUES (?, ?, ?, ?, ?, ?)")
+          .bind(threadId, author.user ? author.user.id : null, author.name, text, ip, t),
+        db.prepare("UPDATE threads SET replies = replies + 1, last_activity = ? WHERE id = ?").bind(t, threadId),
+      ]);
+      return json({ ok: true }, 201);
+    }
+
+    if (route === "delete" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
+      const id = Number(body.id);
+      if (!Number.isInteger(id)) return json({ error: "Bad request." }, 400);
+      if (body.kind === "comment") {
+        await db.prepare("DELETE FROM comments WHERE id = ?").bind(id).run();
+      } else if (body.kind === "thread") {
+        await db.batch([
+          db.prepare("DELETE FROM replies WHERE thread_id = ?").bind(id),
+          db.prepare("DELETE FROM threads WHERE id = ?").bind(id),
+        ]);
+      } else if (body.kind === "reply") {
+        const reply = await db.prepare("SELECT thread_id FROM replies WHERE id = ?").bind(id).first();
+        if (reply) {
+          await db.batch([
+            db.prepare("DELETE FROM replies WHERE id = ?").bind(id),
+            db.prepare("UPDATE threads SET replies = replies - 1 WHERE id = ? AND replies > 0").bind(reply.thread_id),
+          ]);
+        }
+      } else {
+        return json({ error: "Bad request." }, 400);
+      }
+      return json({ ok: true });
     }
   } catch (e) {
     return json({ error: "Server hiccup. Try again in a minute." }, 500);
