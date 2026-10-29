@@ -196,6 +196,16 @@ input[type=text], input[type=password] { font: 12px Verdana, sans-serif; padding
 #board-form #board-name { flex: 0 1 140px; }
 .post { background: #fff; border: 1px solid #aaa; padding: 5px 8px; margin-bottom: 4px; font-family: "Comic Sans MS", cursive; overflow-wrap: anywhere; }
 .post b { color: #00c; }
+.post.owner { background: #fffbd6; border: 2px solid #e0a800; }
+.post.owner b { color: #c00000; }
+.owner-tag {
+  display: inline-block; padding: 1px 6px; vertical-align: middle;
+  border: 1px solid #7a4b00; border-radius: 6px;
+  background: linear-gradient(#fff6a8, #ffcc00 50%, #e39a00 51%, #ffd84d);
+  color: #5a0000; font: bold 10px Arial, sans-serif; letter-spacing: .5px;
+  text-shadow: 0 1px 0 rgba(255,255,255,.6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 1px 2px rgba(0,0,0,.5);
+}
 
 /* ads */
 .ad {
@@ -256,6 +266,29 @@ footer { text-align: center; color: #fff; padding: 16px 10px 30px; background: #
   65% { opacity: 0; } 80% { opacity: .45; } 100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { #red-flash { display: none; } }
+
+.forum-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.forum-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { cursor: pointer; font: bold 11px Arial, sans-serif; padding: 3px 9px; border: 1px solid #666; border-radius: 10px; background: linear-gradient(#fff, #ccc); }
+.chip:hover { background: #ff0; }
+.chip.on { background: linear-gradient(#ffd25c, #ff8c00); border-color: #7a4b00; }
+.forum-table-wrap { overflow-x: auto; }
+.forum-table { width: 100%; border-collapse: collapse; background: #fff; border: 2px ridge #888; }
+.forum-table th { background: linear-gradient(#444, #000); color: #0ff; font: bold 11px "Courier New", monospace; text-align: left; padding: 4px 6px; white-space: nowrap; }
+.forum-table td { padding: 5px 6px; border-bottom: 1px dotted #999; vertical-align: top; overflow-wrap: anywhere; }
+.forum-table tr:nth-child(even) td { background: #f6f1d8; }
+.forum-table .num { text-align: center; }
+.forum-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; background: #fff; border: 2px ridge #888; padding: 8px; margin: 8px 0; }
+.forum-form input[type=text], .forum-form textarea, .forum-form select { width: 100%; max-width: 520px; font: 12px Verdana, sans-serif; padding: 3px; border: 2px inset #999; }
+#forum-name-wrap, #forum-rname-wrap { display: flex; flex-direction: column; gap: 6px; width: 100%; align-items: flex-start; }
+.thread-title { margin: 10px 0 2px; font: bold 18px "Comic Sans MS", "Comic Sans", cursive; color: #00c; overflow-wrap: anywhere; }
+.fpost { background: #fff; border: 1px solid #aaa; padding: 6px 8px; margin: 6px 0; }
+.fpost.owner { background: #fffbd6; border: 2px solid #e0a800; }
+.fpost-head { margin-bottom: 4px; }
+.fpost-head b { color: #00c; }
+.fpost.owner .fpost-head b { color: #c00000; }
+.fpost-body { white-space: pre-wrap; overflow-wrap: anywhere; font-family: "Comic Sans MS", "Comic Sans", cursive; }
+.vote.del { color: #900; }
 
 .ip-box { background: #000; border: 4px ridge #0f0; color: #0f0; text-align: left; font-family: "Courier New", monospace; }
 .ip-box h2 { font-family: "Courier New", monospace; color: #f00; text-align: center; }

@@ -187,7 +187,7 @@
     setTimeout(function () { $("code-popup").hidden = false; }, 1500);
     setTimeout(function () { $("popup").hidden = false; }, 14000);
     setTimeout(showIpPopup, 20000);
-    setTimeout(function () { $("social-popup").hidden = false; }, 26000);
+    setTimeout(showSocialPopup, 26000);
   }
   $("splash-enter").addEventListener("click", closeSplash);
   $("splash-skip").addEventListener("click", function (e) { e.preventDefault(); clearInterval(splashTimer); closeSplash(); });
@@ -198,6 +198,30 @@
     $("code-msg").textContent = "Code applied to your cart! Go ahead and try checking out. It will not work.";
     setTimeout(function () { $("code-popup").hidden = true; }, 2200);
   });
+
+  function showSocialPopup() {
+    $("social-popup").hidden = false;
+    try {
+      var sfx = new Audio("sfx/overwatch.mp3");
+      var played = sfx.play();
+      if (played && played.catch) played.catch(function () {});
+    } catch (e) {}
+  }
+
+  var alarm = null;
+  function startAlarm() {
+    stopAlarm();
+    try {
+      alarm = new Audio("sfx/alarm.mp3");
+      alarm.loop = true;
+      alarm.volume = 1;
+      var started = alarm.play();
+      if (started && started.catch) started.catch(function () {});
+    } catch (e) {}
+  }
+  function stopAlarm() {
+    if (alarm) { alarm.pause(); alarm = null; }
+  }
 
   var ipInfo = null, ipTimer = null;
   api("whoami").then(function (d) { ipInfo = d; }).catch(function () { ipInfo = {}; });
@@ -213,6 +237,7 @@
       "> status: spotted";
     var out = $("ip-readout"), i = 0;
     $("ip-popup").hidden = false;
+    startAlarm();
     var flash = $("red-flash");
     flash.classList.remove("on");
     void flash.offsetWidth;
@@ -225,7 +250,7 @@
       if (i >= text.length) clearInterval(ipTimer);
     }, 35);
   }
-  $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); $("ip-popup").hidden = true; });
+  $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); stopAlarm(); $("ip-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
 
@@ -333,16 +358,157 @@
     $("checkout-msg").textContent = ERRORS[Math.floor(Math.random() * ERRORS.length)];
   });
 
+  /* ---------- forum ---------- */
+  var CATS = ["General", "Product Reviews", "Recipes", "Gaming", "Off Topic"];
+  var forumCat = "", forumThread = 0, lastOwner = false;
+
+  function when(sec) { return new Date(sec * 1000).toLocaleString(); }
+  function badges(p) {
+    return (p.owner ? ' <span class="owner-tag">&#9733; SITE OWNER &#9733;</span>' : '') +
+      (p.guest ? ' <span class="tiny">(guest)</span>' : '');
+  }
+  function delBtn(kind, id) {
+    return user && user.owner
+      ? ' <button class="vote del" type="button" data-kind="' + kind + '" data-id="' + id + '">delete</button>'
+      : '';
+  }
+  function postHtml(p, kind) {
+    return '<div class="fpost' + (p.owner ? ' owner' : '') + '"><div class="fpost-head"><b>' + esc(p.name) + '</b>' +
+      badges(p) + ' <span class="tiny">' + esc(when(p.created)) + '</span>' + delBtn(kind, p.id) +
+      '</div><div class="fpost-body">' + esc(p.body) + '</div></div>';
+  }
+
+  $("forum-cats").innerHTML = '<button type="button" class="chip on" data-cat="">All</button>' +
+    CATS.map(function (c) { return '<button type="button" class="chip" data-cat="' + esc(c) + '">' + esc(c) + '</button>'; }).join("");
+  $("forum-cat").innerHTML = CATS.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join("");
+
+  function loadThreads() {
+    $("forum-status").textContent = "Loading...";
+    api("threads" + (forumCat ? "?cat=" + encodeURIComponent(forumCat) : "")).then(function (d) {
+      $("forum-threads").innerHTML = d.threads.length
+        ? d.threads.map(function (t) {
+            return '<tr><td><a href="#" class="thread-link" data-id="' + t.id + '">' + esc(t.title) + '</a></td>' +
+              '<td>' + esc(t.category) + '</td>' +
+              '<td><b>' + esc(t.name) + '</b>' + badges(t) + '</td>' +
+              '<td class="num">' + t.replies + '</td>' +
+              '<td class="tiny">' + esc(when(t.last_activity)) + '</td></tr>';
+          }).join("")
+        : '<tr><td colspan="5" class="tiny">No threads here yet. Start the first one!</td></tr>';
+      $("forum-status").textContent = "";
+    }).catch(function (err) { $("forum-status").textContent = err.message; });
+  }
+
+  function showList() {
+    forumThread = 0;
+    $("forum-thread-view").hidden = true;
+    $("forum-list-view").hidden = false;
+    loadThreads();
+  }
+
+  function openThread(id) {
+    forumThread = id;
+    $("forum-list-view").hidden = true;
+    $("forum-thread-view").hidden = false;
+    $("forum-thread").innerHTML = '<p class="tiny">Loading...</p>';
+    api("thread?id=" + id).then(function (d) {
+      $("forum-thread").innerHTML =
+        '<h3 class="thread-title">' + esc(d.thread.title) + '</h3>' +
+        '<p class="tiny">in ' + esc(d.thread.category) + ' | ' + d.replies.length + ' ' + (d.replies.length === 1 ? 'reply' : 'replies') + '</p>' +
+        postHtml(d.thread, "thread") +
+        d.replies.map(function (r) { return postHtml(r, "reply"); }).join("");
+    }).catch(function (err) { $("forum-thread").innerHTML = '<p class="err">' + esc(err.message) + '</p>'; });
+  }
+
+  function forumUserChanged() {
+    $("forum-name-wrap").hidden = !!user;
+    $("forum-rname-wrap").hidden = !!user;
+    var owner = !!(user && user.owner);
+    if (owner !== lastOwner) {
+      lastOwner = owner;
+      loadBoard();
+      if (forumThread) openThread(forumThread);
+    }
+  }
+
+  $("forum-cats").addEventListener("click", function (e) {
+    var cat = e.target.getAttribute("data-cat");
+    if (cat === null) return;
+    forumCat = cat;
+    [].forEach.call($("forum-cats").children, function (c) { c.classList.toggle("on", c === e.target); });
+    loadThreads();
+  });
+  $("forum-new-btn").addEventListener("click", function () { $("forum-new-form").hidden = !$("forum-new-form").hidden; });
+  $("forum-refresh").addEventListener("click", loadThreads);
+  $("forum-back").addEventListener("click", showList);
+  $("forum-threads").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("thread-link")) return;
+    e.preventDefault();
+    openThread(Number(e.target.getAttribute("data-id")));
+    $("forum").scrollIntoView();
+  });
+
+  $("forum-new-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var btn = $("forum-post-btn");
+    $("forum-new-err").textContent = "";
+    btn.disabled = true;
+    api("threads", {
+      title: $("forum-title").value, message: $("forum-body").value,
+      category: $("forum-cat").value, name: $("forum-name").value
+    }).then(function (d) {
+      $("forum-title").value = "";
+      $("forum-body").value = "";
+      $("forum-new-form").hidden = true;
+      openThread(d.id);
+    }).catch(function (err) { $("forum-new-err").textContent = err.message; })
+      .then(function () { btn.disabled = false; });
+  });
+
+  $("forum-reply-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var btn = $("forum-reply-btn");
+    $("forum-reply-err").textContent = "";
+    btn.disabled = true;
+    api("replies", { thread_id: forumThread, message: $("forum-reply").value, name: $("forum-rname").value })
+      .then(function () {
+        $("forum-reply").value = "";
+        openThread(forumThread);
+      }).catch(function (err) { $("forum-reply-err").textContent = err.message; })
+      .then(function () { btn.disabled = false; });
+  });
+
+  document.addEventListener("click", function (e) {
+    var b = e.target;
+    if (!b.classList || !b.classList.contains("del")) return;
+    if (!b.getAttribute("data-sure")) {
+      b.setAttribute("data-sure", "1");
+      b.textContent = "really?";
+      setTimeout(function () { b.removeAttribute("data-sure"); b.textContent = "delete"; }, 3000);
+      return;
+    }
+    var kind = b.getAttribute("data-kind");
+    api("delete", { kind: kind, id: Number(b.getAttribute("data-id")) }).then(function () {
+      if (kind === "comment") loadBoard();
+      else if (kind === "thread") showList();
+      else openThread(forumThread);
+    }).catch(function (err) { b.textContent = err.message; });
+  });
+
+  setInterval(function () { if (!document.hidden && !forumThread) loadThreads(); }, 30000);
+  loadThreads();
+
   /* ---------- accounts ---------- */
   function setUser(u) {
     user = u;
     $("account-guest").hidden = !!u;
     $("account-user").hidden = !u;
     $("whoami").textContent = u ? u.name : "";
+    $("whoami-tag").hidden = !(u && u.owner);
     $("board-name-wrap").hidden = !!u;
     $("board-register").hidden = !!u;
     $("board-as").hidden = !u;
     $("board-as").textContent = u ? "Posting as " + u.name : "";
+    forumUserChanged();
   }
 
   $("login").addEventListener("submit", function (e) {
@@ -384,8 +550,10 @@
       $("member-count").textContent = d.members;
       $("board-list").innerHTML = d.posts.length
         ? d.posts.map(function (p) {
-            return '<div class="post"><b>' + esc(p.name) + '</b>' + (p.guest ? ' <span class="tiny">(guest)</span>' : '') + ' <span class="tiny">' +
-              esc(new Date(p.created * 1000).toLocaleString()) + '</span><br>' + esc(p.body) + '</div>';
+            return '<div class="post' + (p.owner ? ' owner' : '') + '"><b>' + esc(p.name) + '</b>' +
+              (p.owner ? ' <span class="owner-tag">&#9733; SITE OWNER &#9733;</span>' : '') +
+              (p.guest ? ' <span class="tiny">(guest)</span>' : '') + ' <span class="tiny">' +
+              esc(new Date(p.created * 1000).toLocaleString()) + '</span>' + delBtn("comment", p.id) + '<br>' + esc(p.body) + '</div>';
           }).join("")
         : '<p class="tiny">No posts yet. Be the first!</p>';
       $("board-status").textContent = "Updated " + new Date().toLocaleTimeString();

@@ -44,7 +44,8 @@
   <a class="btn" href="#top10">TOP 10</a>
   <a class="btn" href="#reviews">REVIEWS</a>
   <a class="btn" href="recipes.html">RECIPES</a>
-  <a class="btn" href="#board">BOARD</a>
+  <a class="btn" href="#forum">FORUM</a>
+  <a class="btn" href="#board">SHOUTBOX</a>
   <a class="btn" href="#about">ABOUT</a>
   <a class="btn cart-btn" href="#" id="cart-open">&#128722; CART (<span id="cart-count">0</span>)</a>
 </nav>
@@ -64,7 +65,7 @@
           <p class="tiny"><a href="#" id="register-open">Register FREE!</a></p>
         </div>
         <div id="account-user" hidden>
-          <p>Welcome back,<br><b id="whoami"></b>!</p>
+          <p>Welcome back,<br><b id="whoami"></b>!<br><span id="whoami-tag" class="owner-tag" hidden>&#9733; SITE OWNER &#9733;</span></p>
           <p class="tiny">You have <b>0</b> new messages and <b>0</b> friends.</p>
           <button class="btn small" id="logout-btn" type="button">LOGOUT</button>
         </div>
@@ -130,7 +131,7 @@
     </section>
 
     <section id="board" class="box">
-      <h2>MESSAGE BOARD</h2>
+      <h2>SHOUTBOX</h2>
       <p class="tiny" id="board-hint">Anyone can post. Be nice. Or don't. We are not your mom. <a href="#" id="board-register">Register</a> to reserve your name.</p>
       <form id="board-form">
         <span id="board-name-wrap"><label for="board-name">Name:</label> <input id="board-name" type="text" maxlength="20" placeholder="your name"></span>
@@ -142,6 +143,50 @@
       <p id="board-err" class="err tiny"></p>
       <p class="tiny"><button class="btn small" id="board-refresh" type="button">REFRESH</button> <span id="board-status"></span></p>
       <div id="board-list"></div>
+    </section>
+
+    <section id="forum" class="box">
+      <h2>THE FORUM</h2>
+      <div id="forum-list-view">
+        <div class="forum-bar">
+          <span id="forum-cats" class="forum-cats"></span>
+          <span>
+            <button class="btn small" id="forum-new-btn" type="button">NEW THREAD</button>
+            <button class="btn small" id="forum-refresh" type="button">REFRESH</button>
+          </span>
+        </div>
+        <form id="forum-new-form" class="forum-form" hidden>
+          <label for="forum-cat">Category:</label>
+          <select id="forum-cat"></select>
+          <span id="forum-name-wrap"><label for="forum-name">Name:</label>
+            <input id="forum-name" type="text" maxlength="20" placeholder="your name"></span>
+          <label for="forum-title">Title:</label>
+          <input id="forum-title" type="text" maxlength="80">
+          <label for="forum-body">Message:</label>
+          <textarea id="forum-body" rows="4" maxlength="1000"></textarea>
+          <button class="btn small" id="forum-post-btn" type="submit">POST THREAD</button>
+          <p id="forum-new-err" class="err tiny"></p>
+        </form>
+        <div class="forum-table-wrap">
+          <table class="forum-table">
+            <thead><tr><th>Topic</th><th>Category</th><th>Started by</th><th class="num">Replies</th><th>Last post</th></tr></thead>
+            <tbody id="forum-threads"></tbody>
+          </table>
+        </div>
+        <p class="tiny" id="forum-status"></p>
+      </div>
+      <div id="forum-thread-view" hidden>
+        <button class="btn small" id="forum-back" type="button">&lt;&lt; BACK TO THREADS</button>
+        <div id="forum-thread"></div>
+        <form id="forum-reply-form" class="forum-form">
+          <span id="forum-rname-wrap"><label for="forum-rname">Name:</label>
+            <input id="forum-rname" type="text" maxlength="20" placeholder="your name"></span>
+          <label for="forum-reply">Your reply:</label>
+          <textarea id="forum-reply" rows="3" maxlength="1000"></textarea>
+          <button class="btn small" id="forum-reply-btn" type="submit">POST REPLY</button>
+          <p id="forum-reply-err" class="err tiny"></p>
+        </form>
+      </div>
     </section>
 
     <section id="about" class="box">
