@@ -20,12 +20,16 @@
   function pref() { try { return localStorage.getItem("rj_music"); } catch (e) { return null; } }
   function setPref(v) { try { localStorage.setItem("rj_music", v); } catch (e) {} }
 
-  var idx = 0, resumeAt = 0;
+  var idx = 0, resumeAt = 0, saved = null;
   try {
-    idx = parseInt(sessionStorage.getItem("rj_music_idx"), 10) || 0;
+    saved = sessionStorage.getItem("rj_music_idx");
+    idx = parseInt(saved, 10) || 0;
     resumeAt = parseFloat(sessionStorage.getItem("rj_music_pos")) || 0;
   } catch (e) {}
-  if (idx < 0 || idx >= PLAYLIST.length) { idx = 0; resumeAt = 0; }
+  if (saved === null || document.getElementById("splash") || idx < 0 || idx >= PLAYLIST.length) {
+    idx = Math.floor(Math.random() * PLAYLIST.length);
+    resumeAt = 0;
+  }
 
   var many = PLAYLIST.length > 1;
   var box = document.createElement("div");
@@ -93,9 +97,14 @@
   volInput.addEventListener("input", setVolume);
   setVolume();
 
-  window.RJMusic = {
-    autoplay: function () { if (pref() !== "off") start(); }
-  };
+  function autoplay() { if (pref() !== "off" && audio.paused) start(); }
+  window.RJMusic = { autoplay: autoplay };
 
-  if (pref() === "on" && !document.getElementById("splash")) start();
+  autoplay();
+  ["pointerdown", "keydown", "touchend", "click"].forEach(function (name) {
+    document.addEventListener(name, function (e) {
+      if (e.target && e.target.closest && e.target.closest("#music-player")) return;
+      autoplay();
+    }, true);
+  });
 })();

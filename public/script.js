@@ -186,6 +186,7 @@
     if (window.RJMusic) window.RJMusic.autoplay();
     setTimeout(function () { $("code-popup").hidden = false; }, 1500);
     setTimeout(function () { $("popup").hidden = false; }, 14000);
+    setTimeout(showIpPopup, 20000);
     setTimeout(function () { $("social-popup").hidden = false; }, 26000);
   }
   $("splash-enter").addEventListener("click", closeSplash);
@@ -197,6 +198,34 @@
     $("code-msg").textContent = "Code applied to your cart! Go ahead and try checking out. It will not work.";
     setTimeout(function () { $("code-popup").hidden = true; }, 2200);
   });
+
+  var ipInfo = null, ipTimer = null;
+  api("whoami").then(function (d) { ipInfo = d; }).catch(function () { ipInfo = {}; });
+  function regionName(code) {
+    try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code); } catch (e) { return code; }
+  }
+  function showIpPopup() {
+    var d = ipInfo || {};
+    var place = [d.city, d.region, d.country ? regionName(d.country) : ""].filter(Boolean).join(", ");
+    var text = "> tracing connection...\n" +
+      "IP ADDRESS .... " + (d.ip || "[hidden. suspicious.]") + "\n" +
+      "LOCATION ...... " + (place || "[somewhere on Earth]") + "\n" +
+      "> status: spotted";
+    var out = $("ip-readout"), i = 0;
+    $("ip-popup").hidden = false;
+    var flash = $("red-flash");
+    flash.classList.remove("on");
+    void flash.offsetWidth;
+    flash.classList.add("on");
+    clearInterval(ipTimer);
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { out.textContent = text; return; }
+    out.textContent = "";
+    ipTimer = setInterval(function () {
+      out.textContent = text.slice(0, ++i);
+      if (i >= text.length) clearInterval(ipTimer);
+    }, 35);
+  }
+  $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); $("ip-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
 
