@@ -183,6 +183,7 @@
   }, 180);
   function closeSplash() {
     $("splash").style.display = "none";
+    if (window.RJMusic) window.RJMusic.autoplay();
     setTimeout(function () { $("code-popup").hidden = false; }, 1500);
     setTimeout(function () { $("popup").hidden = false; }, 14000);
     setTimeout(function () { $("social-popup").hidden = false; }, 26000);
@@ -309,8 +310,10 @@
     $("account-guest").hidden = !!u;
     $("account-user").hidden = !u;
     $("whoami").textContent = u ? u.name : "";
-    $("board-form").hidden = !u;
-    $("board-hint").hidden = !!u;
+    $("board-name-wrap").hidden = !!u;
+    $("board-register").hidden = !!u;
+    $("board-as").hidden = !u;
+    $("board-as").textContent = u ? "Posting as " + u.name : "";
   }
 
   $("login").addEventListener("submit", function (e) {
@@ -348,11 +351,11 @@
   /* ---------- message board ---------- */
   function loadBoard() {
     $("board-status").textContent = "Loading...";
-    api("posts").then(function (d) {
+    api("comments").then(function (d) {
       $("member-count").textContent = d.members;
       $("board-list").innerHTML = d.posts.length
         ? d.posts.map(function (p) {
-            return '<div class="post"><b>' + esc(p.name) + '</b> <span class="tiny">' +
+            return '<div class="post"><b>' + esc(p.name) + '</b>' + (p.guest ? ' <span class="tiny">(guest)</span>' : '') + ' <span class="tiny">' +
               esc(new Date(p.created * 1000).toLocaleString()) + '</span><br>' + esc(p.body) + '</div>';
           }).join("")
         : '<p class="tiny">No posts yet. Be the first!</p>';
@@ -360,12 +363,13 @@
     }).catch(function (err) { $("board-status").textContent = err.message; });
   }
   $("board-refresh").addEventListener("click", loadBoard);
+  $("board-register").addEventListener("click", function (e) { e.preventDefault(); $("register-open").click(); });
   $("board-form").addEventListener("submit", function (e) {
     e.preventDefault();
     var input = $("board-msg"), btn = $("board-btn");
     $("board-err").textContent = "";
     btn.disabled = true;
-    api("posts", { message: input.value }).then(function () {
+    api("comments", { message: input.value, name: $("board-name").value }).then(function () {
       input.value = "";
       loadBoard();
     }).catch(function (err) { $("board-err").textContent = err.message; })

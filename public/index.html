@@ -131,12 +131,14 @@
 
     <section id="board" class="box">
       <h2>MESSAGE BOARD</h2>
-      <p class="tiny" id="board-hint">Login or register to post. Be nice. Or don't. We are not your mom.</p>
-      <form id="board-form" hidden>
-        <label for="board-msg">Message:</label>
+      <p class="tiny" id="board-hint">Anyone can post. Be nice. Or don't. We are not your mom. <a href="#" id="board-register">Register</a> to reserve your name.</p>
+      <form id="board-form">
+        <span id="board-name-wrap"><label for="board-name">Name:</label> <input id="board-name" type="text" maxlength="20" placeholder="your name"></span>
+        <label for="board-msg">Comment:</label>
         <input id="board-msg" type="text" maxlength="280">
         <button class="btn small" id="board-btn" type="submit">POST</button>
       </form>
+      <p id="board-as" class="tiny" hidden></p>
       <p id="board-err" class="err tiny"></p>
       <p class="tiny"><button class="btn small" id="board-refresh" type="button">REFRESH</button> <span id="board-status"></span></p>
       <div id="board-list"></div>
@@ -265,6 +267,7 @@
   </div>
 </div>
 
+<script src="music.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
