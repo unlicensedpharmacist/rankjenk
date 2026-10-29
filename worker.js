@@ -75,11 +75,21 @@ async function currentUser(request, db) {
 }
 
 async function handleApi(request, env) {
-  const db = env.DB;
-  if (!db) return json({ error: "The database is not connected yet." }, 503);
-
   const route = new URL(request.url).pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const method = request.method;
+
+  if (route === "whoami" && method === "GET") {
+    const cf = request.cf || {};
+    return json({
+      ip: request.headers.get("cf-connecting-ip") || "",
+      city: cf.city || "",
+      region: cf.region || "",
+      country: cf.country || "",
+    });
+  }
+
+  const db = env.DB;
+  if (!db) return json({ error: "The database is not connected yet." }, 503);
 
   let body = {};
   if (method === "POST") {
