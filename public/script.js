@@ -68,6 +68,15 @@
     setTimeout(function () { $("popup").hidden = false; }, 14000);
     setTimeout(showIpPopup, 20000);
     setTimeout(showSocialPopup, 26000);
+    randomOverwatch();
+  }
+
+  /* overwatch sound also plays at random moments while you browse (every 40s to 2.5 min) */
+  function randomOverwatch() {
+    setTimeout(function () {
+      if (!document.hidden) playSound(sounds.overwatch);
+      randomOverwatch();
+    }, 40000 + Math.random() * 110000);
   }
   $("splash-enter").addEventListener("click", function () { unlockSounds(); closeSplash(); });
 
