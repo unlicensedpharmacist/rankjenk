@@ -28,135 +28,15 @@
   function stars(n) { return "★★★★★".slice(0, n) + "☆☆☆☆☆".slice(0, 5 - n); }
   function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
-  /* ---------- crusty pixel-art item pictures ---------- */
-  var PALETTE = [
-    0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
-    0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff,
-    0x804000, 0xc08040, 0xffc080, 0xffe0a0, 0xe0c000, 0x404040, 0xff8000, 0x80c0ff
-  ].map(function (c) { return [(c >> 16) & 255, (c >> 8) & 255, c & 255]; });
-  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-  var BGS = {
-    1: ["#80c0ff", "#ffffff"], 2: ["#ffe0a0", "#ff8000"], 3: ["#c0c0c0", "#ffffff"], 4: ["#400040", "#ff80ff"],
-    5: ["#80ff80", "#ffffff"], 6: ["#000080", "#80c0ff"], 7: ["#ffc080", "#ffff80"], 8: ["#00ffff", "#ffffff"]
-  };
-
-  function pen(ctx) {
-    function path(pts) { ctx.beginPath(); pts.forEach(function (q, i) { if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); }); }
-    return {
-      r: function (c, x, y, w, h) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); },
-      e: function (c, x, y, rx, ry) { ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.2832); ctx.fill(); },
-      p: function (c, pts) { ctx.fillStyle = c; path(pts); ctx.closePath(); ctx.fill(); },
-      l: function (c, w, pts) { ctx.strokeStyle = c; ctx.lineWidth = w; path(pts); ctx.stroke(); },
-      a: function (c, w, x, y, rad, a0, a1) { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, rad, a0, a1); ctx.stroke(); },
-      o: function (x, y, w, h) { ctx.strokeStyle = "#000"; ctx.lineWidth = 1.5; ctx.strokeRect(x + 0.5, y + 0.5, w, h); },
-      t: function (c, s, size, x, y) { ctx.fillStyle = c; ctx.font = "bold " + size + "px Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(s, x, y); }
-    };
-  }
-
-  var ART = {
-    1: function (d) {
-      d.r("#808080", 18, 12, 28, 8); d.r("#c0c0c0", 20, 13, 4, 6);
-      d.r("#c0e0ff", 16, 20, 32, 34); d.r("#804000", 17, 28, 30, 25); d.r("#a06020", 17, 28, 30, 3);
-      d.r("#ffffff", 18, 22, 3, 28);
-      d.r("#ffffff", 22, 35, 21, 13); d.o(22, 35, 20, 12); d.t("#e00000", "J", 12, 32, 42);
-      d.o(16, 20, 31, 33);
-    },
-    2: function (d) {
-      d.l("#202020", 2, [[46, 24], [54, 28], [54, 44], [50, 46]]); d.r("#202020", 48, 44, 5, 6);
-      d.r("#404040", 12, 54, 38, 5);
-      d.r("#c00000", 16, 8, 30, 46); d.r("#ff4040", 16, 8, 30, 4);
-      d.r("#003000", 20, 14, 22, 10); d.t("#00ff00", "8.88", 7, 31, 19);
-      d.r("#ffffff", 16, 30, 30, 4); d.t("#ffffff", "GAS", 9, 31, 44);
-      d.o(16, 8, 29, 45);
-    },
-    3: function (d) {
-      d.r("#c0c0c0", 21, 12, 22, 42); d.e("#808080", 32, 12, 11, 3); d.e("#c0c0c0", 32, 12, 9, 2);
-      d.r("#e00000", 21, 24, 22, 16); d.t("#ffffff", "0", 14, 32, 32);
-      d.r("#ffffff", 24, 14, 3, 38); d.e("#808080", 32, 54, 11, 3);
-      d.o(21, 12, 21, 41);
-    },
-    4: function (d) {
-      d.r("#808080", 17, 50, 30, 6);
-      d.r("#ffe0a0", 22, 28, 20, 24); d.r("#ffffff", 22, 28, 4, 24); d.e("#ffe0a0", 26, 31, 3, 5);
-      d.e("#e0c000", 32, 28, 10, 2); d.r("#000000", 31, 20, 2, 8);
-      d.p("#ff8000", [[32, 6], [37, 14], [36, 20], [28, 20], [27, 14]]);
-      d.p("#ffff00", [[32, 11], [35, 16], [34, 20], [30, 20], [29, 16]]);
-      d.o(22, 28, 19, 23);
-    },
-    5: function (d) {
-      var i;
-      d.l("#804000", 3, [[16, 34], [20, 12], [44, 12], [48, 34]]);
-      d.r("#e02020", 22, 22, 20, 14); d.r("#ffff00", 30, 22, 4, 14); d.r("#ffff00", 22, 27, 20, 3);
-      d.e("#ffff00", 28, 20, 4, 3); d.e("#ffff00", 36, 20, 4, 3);
-      d.p("#a06020", [[12, 34], [52, 34], [48, 56], [16, 56]]);
-      d.r("#804000", 10, 32, 44, 4);
-      for (i = 0; i < 6; i++) d.l("#804000", 1, [[18 + i * 6, 36], [19 + i * 6, 56]]);
-      for (i = 0; i < 3; i++) d.l("#804000", 1, [[14, 42 + i * 6], [50, 42 + i * 6]]);
-    },
-    6: function (d) {
-      d.l("#e0c000", 3, [[20, 14], [12, 14], [14, 26], [24, 28]]);
-      d.l("#e0c000", 3, [[44, 14], [52, 14], [50, 26], [40, 28]]);
-      d.p("#e0c000", [[18, 10], [46, 10], [42, 32], [32, 38], [22, 32]]);
-      d.p("#ffff80", [[22, 12], [27, 12], [25, 30], [23, 28]]);
-      d.r("#e0c000", 29, 38, 6, 10); d.r("#804000", 20, 48, 24, 8); d.r("#e0c000", 24, 50, 16, 3);
-      d.t("#804000", "1", 16, 33, 22);
-    },
-    7: function (d) {
-      d.r("#e0c000", 20, 10, 24, 7); d.r("#ffff80", 22, 11, 3, 5);
-      d.r("#c0e0ff", 18, 17, 28, 4); d.r("#c0e0ff", 14, 21, 36, 33); d.r("#c08040", 15, 30, 34, 23);
-      d.r("#ffffff", 17, 24, 3, 26);
-      d.l("#804000", 1, [[18, 19], [46, 21]]); d.l("#804000", 1, [[18, 21], [46, 19]]);
-      d.r("#ffe0a0", 21, 35, 23, 13); d.o(21, 35, 22, 12); d.t("#800000", "No.7", 8, 32, 41);
-      d.o(14, 21, 35, 32);
-    },
-    8: function (d) {
-      d.e("#c0c0c0", 32, 32, 25, 25);
-      d.a("#ff0000", 3, 32, 32, 18, 3.6, 4.4); d.a("#ffff00", 3, 32, 32, 18, 4.4, 5.2);
-      d.a("#00c000", 3, 32, 32, 18, 5.2, 6.0); d.a("#0080ff", 3, 32, 32, 18, 0.0, 0.8);
-      d.e("#0000a0", 32, 32, 9, 9); d.e("#ffffff", 32, 32, 4, 4);
-      d.a("#000000", 1.5, 32, 32, 25, 0, 6.2832);
-    }
-  };
-
-  function dither(ctx, seed) {
-    var img = ctx.getImageData(0, 0, 64, 64), px = img.data;
-    var s = seed * 7919 + 13;
-    function rnd() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
-    var x, y, k, prev = null;
-    for (y = 0; y < 64; y++) {
-      for (x = 0; x < 64; x++) {
-        var i = (y * 64 + x) * 4;
-        var off = (BAYER[(y & 3) * 4 + (x & 3)] - 7.5) * 5;
-        var r = px[i] + off, g = px[i + 1] + off, b = px[i + 2] + off;
-        var best = PALETTE[0], bd = 1e9;
-        for (k = 0; k < PALETTE.length; k++) {
-          var c = PALETTE[k], dist = (r - c[0]) * (r - c[0]) + (g - c[1]) * (g - c[1]) + (b - c[2]) * (b - c[2]);
-          if (dist < bd) { bd = dist; best = c; }
-        }
-        if (x > 0 && prev && rnd() < 0.06) best = prev;
-        px[i] = best[0]; px[i + 1] = best[1]; px[i + 2] = best[2]; px[i + 3] = 255;
-        prev = best;
-      }
-      prev = null;
-    }
-    ctx.putImageData(img, 0, 0);
-  }
-
+  /* ---------- product photos ---------- */
   function paintIcon(p) {
-    var cv = document.createElement("canvas");
-    cv.width = cv.height = 64;
-    cv.className = "icon";
-    cv.setAttribute("role", "img");
-    cv.setAttribute("aria-label", p.name);
-    var ctx = cv.getContext("2d");
-    var bg = BGS[p.id];
-    var g = ctx.createLinearGradient(0, 0, 0, 64);
-    g.addColorStop(0, bg[0]); g.addColorStop(1, bg[1]);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(32, 58, 22, 4, 0, 0, 6.2832); ctx.fill();
-    ART[p.id](pen(ctx));
-    dither(ctx, p.id);
-    return cv;
+    var img = document.createElement("img");
+    img.className = "icon";
+    img.src = "img/product" + p.id + ".jpg";
+    img.alt = p.name;
+    img.width = 400; img.height = 400;
+    img.loading = "lazy";
+    return img;
   }
 
   /* ---------- server calls ---------- */
