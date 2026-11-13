@@ -13,6 +13,12 @@
   ];
 
   var audio = new Audio();
+
+  /* background track: plays whenever the regular music is turned off */
+  var BG = { file: "music/doxbin.mp3", title: "You're on Doxbin" };
+  var bg = new Audio(BG.file);
+  bg.loop = true;
+  bg.preload = "auto";
   audio.preload = "none";
   audio.volume = 0.5;
   audio.loop = PLAYLIST.length === 1;
@@ -48,10 +54,21 @@
   var btn = document.getElementById("mp-btn");
   var now = document.getElementById("mp-now");
 
+  function showTrack() {
+    now.textContent = "now playing: " + PLAYLIST[idx].title + (many ? " (" + (idx + 1) + "/" + PLAYLIST.length + ")" : "");
+  }
+  function playBg() {
+    if (!audio.paused || !bg.paused) return;
+    now.textContent = "background: " + BG.title;
+    var p = bg.play();
+    if (p && p.catch) p.catch(function () {});
+  }
+  function stopBg() { if (!bg.paused) bg.pause(); }
+
   function load(i) {
     idx = i;
     audio.src = PLAYLIST[i].file;
-    now.textContent = "now playing: " + PLAYLIST[i].title + (many ? " (" + (i + 1) + "/" + PLAYLIST.length + ")" : "");
+    showTrack();
     try { sessionStorage.setItem("rj_music_idx", String(i)); sessionStorage.setItem("rj_music_pos", "0"); } catch (e) {}
   }
   function start() {
@@ -72,7 +89,7 @@
     if (resumeAt > 0 && resumeAt < audio.duration) audio.currentTime = resumeAt;
     resumeAt = 0;
   });
-  audio.addEventListener("play", render);
+  audio.addEventListener("play", function () { stopBg(); showTrack(); render(); });
   audio.addEventListener("pause", render);
   audio.addEventListener("ended", function () { go(1); });
   setInterval(function () {
@@ -80,7 +97,7 @@
   }, 1000);
 
   btn.addEventListener("click", function () {
-    if (audio.paused) { setPref("on"); start(); } else { setPref("off"); audio.pause(); }
+    if (audio.paused) { setPref("on"); stopBg(); start(); } else { setPref("off"); audio.pause(); playBg(); }
   });
   if (many) {
     document.getElementById("mp-next").addEventListener("click", function () { setPref("on"); go(1); });
@@ -92,12 +109,16 @@
   var volInput = document.getElementById("mp-vol");
   function setVolume() {
     audio.volume = volInput.value / 100;
+    bg.volume = volInput.value / 100;
     volInput.style.setProperty("--fill", volInput.value + "%");
   }
   volInput.addEventListener("input", setVolume);
   setVolume();
 
-  function autoplay() { if (pref() !== "off" && audio.paused) start(); }
+  function autoplay() {
+    if (pref() === "off") playBg();
+    else if (audio.paused) start();
+  }
   window.RJMusic = { autoplay: autoplay };
 
   autoplay();

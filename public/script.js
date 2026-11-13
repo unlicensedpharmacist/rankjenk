@@ -189,8 +189,29 @@
     setTimeout(showIpPopup, 20000);
     setTimeout(showSocialPopup, 26000);
   }
-  $("splash-enter").addEventListener("click", closeSplash);
-  $("splash-skip").addEventListener("click", function (e) { e.preventDefault(); clearInterval(splashTimer); closeSplash(); });
+  $("splash-enter").addEventListener("click", function () { unlockSounds(); closeSplash(); });
+
+  /* phones only let a page play sound after a tap, so the ENTER tap "unlocks"
+     the alarm and overwatch sounds now, and they play later when the popups show */
+  var sounds = { alarm: new Audio("alarm.mp3"), overwatch: new Audio("overwatch.mp3") };
+  sounds.alarm.loop = true;
+  sounds.alarm.preload = sounds.overwatch.preload = "auto";
+  function unlockSounds() {
+    Object.keys(sounds).forEach(function (k) {
+      var a = sounds[k];
+      a.muted = true;
+      var p = a.play();
+      var reset = function () { a.pause(); a.currentTime = 0; a.muted = false; };
+      if (p && p.then) p.then(reset, function () { a.muted = false; }); else reset();
+    });
+  }
+  function playSound(a) {
+    try {
+      a.muted = false; a.currentTime = 0; a.volume = 1;
+      var p = a.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
 
   $("code-close").addEventListener("click", function () { $("code-popup").hidden = true; });
   $("code-apply").addEventListener("click", function () {
@@ -201,26 +222,15 @@
 
   function showSocialPopup() {
     $("social-popup").hidden = false;
-    try {
-      var sfx = new Audio("sfx/overwatch.mp3");
-      var played = sfx.play();
-      if (played && played.catch) played.catch(function () {});
-    } catch (e) {}
+    playSound(sounds.overwatch);
   }
 
-  var alarm = null;
   function startAlarm() {
-    stopAlarm();
-    try {
-      alarm = new Audio("sfx/alarm.mp3");
-      alarm.loop = true;
-      alarm.volume = 1;
-      var started = alarm.play();
-      if (started && started.catch) started.catch(function () {});
-    } catch (e) {}
+    playSound(sounds.alarm);
+    if (navigator.vibrate) { try { navigator.vibrate([400, 150, 400, 150, 400]); } catch (e) {} }
   }
   function stopAlarm() {
-    if (alarm) { alarm.pause(); alarm = null; }
+    try { sounds.alarm.pause(); sounds.alarm.currentTime = 0; } catch (e) {}
   }
 
   var ipInfo = null, ipTimer = null;
@@ -583,8 +593,8 @@
   if (!reduce) {
     document.addEventListener("mousemove", function (e) {
       var s = document.createElement("span");
-      s.textContent = "✦";
-      s.style.cssText = "position:fixed;pointer-events:none;z-index:2000;font-size:14px;color:hsl(" + (Math.random() * 360) + ",100%,60%);left:" + e.clientX + "px;top:" + e.clientY + "px;transition:all .7s;";
+      s.textContent = "●";
+      s.style.cssText = "position:fixed;pointer-events:none;z-index:2000;font-size:" + (6 + Math.random() * 8) + "px;color:hsl(" + (20 + Math.random() * 15) + "," + (50 + Math.random() * 30) + "%," + (12 + Math.random() * 14) + "%);left:" + e.clientX + "px;top:" + e.clientY + "px;transition:all .7s;";
       document.body.appendChild(s);
       requestAnimationFrame(function () { s.style.opacity = "0"; s.style.transform = "translateY(20px) scale(.2)"; });
       setTimeout(function () { s.remove(); }, 750);
