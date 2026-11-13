@@ -491,3 +491,11 @@ footer .tiny { font-size: 14px; }
   .blink, .rainbow, .logo, .spin-badge::before, .marquee span, .ad1, .chain-v, .fly, body::before,
   .code-box h2.code-big, .mp-scroll span { animation: none; }
 }
+
+/* thread title inside the forum box: not a box header */
+.box h3.thread-title {
+  margin: 14px 0 2px; padding: 0; background: none; border: 0;
+  font: bold 20px/1.25 "Comic Sans MS", "Comic Sans", "Chalkboard SE", "Comic Neue", "Trebuchet MS", sans-serif;
+  letter-spacing: 0; color: #5a0000; text-shadow: none;
+}
+#forum-back { margin-top: 2px; }
