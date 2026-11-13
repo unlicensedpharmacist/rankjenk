@@ -404,17 +404,7 @@ async function handleApi(request, env) {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    // Session cookies are Secure, so they only survive over https.
-    // Force http visitors onto https so logins persist across pages.
-    let scheme = url.protocol.replace(":", "");
-    const cfv = request.headers.get("cf-visitor");
-    if (cfv) { try { scheme = JSON.parse(cfv).scheme || scheme; } catch (e) {} }
-    if (scheme === "http") {
-      url.protocol = "https:";
-      return Response.redirect(url.toString(), 301);
-    }
-    if (url.pathname.startsWith("/api/")) return handleApi(request, env);
+    if (new URL(request.url).pathname.startsWith("/api/")) return handleApi(request, env);
     return env.ASSETS.fetch(request);
   },
 };
