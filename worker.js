@@ -370,6 +370,37 @@ async function handleApi(request, env) {
       return json({ visits: results, totals, days: VISIT_DAYS });
     }
 
+    if (route === "users" && method === "GET") {
+      const user = await currentUser(request, db);
+      if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
+      const { results } = await db
+        .prepare(
+          "SELECT u.id, u.name, u.created, " +
+            "(SELECT COUNT(*) FROM comments c WHERE c.user_id = u.id) + " +
+            "(SELECT COUNT(*) FROM threads t WHERE t.user_id = u.id) + " +
+            "(SELECT COUNT(*) FROM replies r WHERE r.user_id = u.id) AS posts " +
+            "FROM users u ORDER BY u.id ASC LIMIT 2000"
+        )
+        .all();
+      const users = results.map((u) => ({ id: u.id, name: u.name, created: u.created, posts: u.posts, owner: u.name.toLowerCase() === OWNER_NAME }));
+      return json({ users });
+    }
+
+    if (route === "setpassword" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
+      const id = Number(body.id);
+      const password = String(body.password || "");
+      if (!Number.isInteger(id)) return json({ error: "Bad request." }, 400);
+      if (password.length < 6 || password.length > 100) return json({ error: "Password must be 6-100 characters." }, 400);
+      const target = await db.prepare("SELECT id, name FROM users WHERE id = ?").bind(id).first();
+      if (!target) return json({ error: "No such user." }, 404);
+      await db.prepare("UPDATE users SET pass = ? WHERE id = ?").bind(await hashPassword(password), id).run();
+      // sign the user out everywhere so the old password can't keep a session alive
+      await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(id).run();
+      return json({ ok: true, name: target.name });
+    }
+
     if (route === "delete" && method === "POST") {
       const user = await currentUser(request, db);
       if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
