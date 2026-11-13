@@ -123,7 +123,14 @@
   }
 
   var ipInfo = null, ipTimer = null;
-  api("whoami").then(function (d) { ipInfo = d; }).catch(function () { ipInfo = {}; });
+  var visitInfo = {
+    referrer: document.referrer || "",
+    screen: (screen.width || "") + "x" + (screen.height || ""),
+    viewport: (window.innerWidth || "") + "x" + (window.innerHeight || ""),
+    lang: navigator.language || (navigator.languages && navigator.languages[0]) || "",
+    tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return ""; } })()
+  };
+  api("whoami", visitInfo).then(function (d) { ipInfo = d; }).catch(function () { ipInfo = {}; });
   function regionName(code) {
     try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code); } catch (e) { return code; }
   }

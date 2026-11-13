@@ -73,7 +73,8 @@
           <thead><tr>
             <th data-k="ip">IP</th><th data-k="place">Location</th><th data-k="lat">Coordinates</th>
             <th data-k="isp">Provider</th><th data-k="hits" class="num">Visits</th>
-            <th data-k="first_seen">First seen</th><th data-k="last_seen">Last seen</th><th>Device</th>
+            <th data-k="first_seen">First seen</th><th data-k="last_seen">Last seen</th>
+            <th>Device</th><th data-k="screen">Screen</th><th data-k="tz">Timezone</th><th data-k="lang">Language</th><th data-k="referrer">Came from</th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -133,7 +134,7 @@
   function render() {
     var q = $("q").value.trim().toLowerCase();
     var list = data.filter(function (v) {
-      return !q || [v.ip, place(v), v.isp, device(v.ua)].join(" ").toLowerCase().indexOf(q) !== -1;
+      return !q || [v.ip, place(v), v.isp, device(v.ua), v.tz, v.lang, v.referrer].join(" ").toLowerCase().indexOf(q) !== -1;
     });
     list.sort(function (a, b) {
       var x = sortKey === "place" ? place(a) : a[sortKey], y = sortKey === "place" ? place(b) : b[sortKey];
@@ -145,8 +146,12 @@
         "<td>" + (coords ? "<a href=\"#\" class=\"go\">" + esc(coords) + "</a>" : "") + "</td>" +
         "<td>" + esc(v.isp) + "</td><td class=\"num\">" + v.hits + "</td>" +
         "<td class=\"tiny\">" + esc(when(v.first_seen)) + "</td><td class=\"tiny\">" + esc(when(v.last_seen)) + "</td>" +
-        "<td class=\"ua\" title=\"" + esc(v.ua) + "\">" + esc(device(v.ua)) + "</td></tr>";
-    }).join("") : "<tr><td colspan=\"8\" class=\"tiny\">No visitors logged yet.</td></tr>";
+        "<td class=\"ua\" title=\"" + esc(v.ua) + "\">" + esc(device(v.ua)) + "</td>" +
+        "<td class=\"tiny\">" + esc(v.screen) + (v.viewport ? " <span style=\"opacity:.6\">(win " + esc(v.viewport) + ")</span>" : "") + "</td>" +
+        "<td class=\"tiny\">" + esc(v.tz) + "</td>" +
+        "<td class=\"tiny\">" + esc(v.lang) + "</td>" +
+        "<td class=\"ua\" title=\"" + esc(v.referrer) + "\">" + (v.referrer ? esc(v.referrer.replace(/^https?:\/\//, "").slice(0, 40)) : "<span style=\"opacity:.5\">direct</span>") + "</td></tr>";
+    }).join("") : "<tr><td colspan=\"12\" class=\"tiny\">No visitors logged yet.</td></tr>";
     drawMap(list);
   }
 

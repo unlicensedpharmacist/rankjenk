@@ -16,13 +16,13 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS replies (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER NOT NULL, user_id INTEGER, name TEXT NOT NULL, body TEXT NOT NULL, ip TEXT NOT NULL, created INTEGER NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_threads_activity ON threads (last_activity)",
   "CREATE INDEX IF NOT EXISTS idx_replies_thread ON replies (thread_id)",
-  "CREATE TABLE IF NOT EXISTS visits (ip TEXT PRIMARY KEY, city TEXT, region TEXT, country TEXT, lat REAL, lon REAL, isp TEXT, ua TEXT, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, hits INTEGER NOT NULL DEFAULT 1)",
+  "CREATE TABLE IF NOT EXISTS visits (ip TEXT PRIMARY KEY, city TEXT, region TEXT, country TEXT, lat REAL, lon REAL, isp TEXT, ua TEXT, referrer TEXT, tz TEXT, lang TEXT, screen TEXT, viewport TEXT, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, hits INTEGER NOT NULL DEFAULT 1)",
   "CREATE INDEX IF NOT EXISTS idx_visits_last ON visits (last_seen)",
 ];
 
 const VISIT_DAYS = 30; // visitor log entries are deleted after this many days
 
-async function logVisit(request, db) {
+async function logVisit(request, db, extra) {
   const ip = request.headers.get("cf-connecting-ip");
   if (!ip) return;
   const cf = request.cf || {};
@@ -30,23 +30,42 @@ async function logVisit(request, db) {
   const lat = cf.latitude != null ? Number(cf.latitude) : null;
   const lon = cf.longitude != null ? Number(cf.longitude) : null;
   const ua = String(request.headers.get("user-agent") || "").slice(0, 300);
+  const clip = (v, n) => (v == null ? "" : String(v).replace(/[\x00-\x1f]/g, " ").slice(0, n));
+  const e = extra || {};
+  const referrer = clip(e.referrer || request.headers.get("referer"), 300);
+  const tz = clip(e.tz, 60);
+  const lang = clip(e.lang || request.headers.get("accept-language"), 60);
+  const screen = clip(e.screen, 20);
+  const viewport = clip(e.viewport, 20);
   await ensureSchema(db);
   await db
     .prepare(
-      "INSERT INTO visits (ip, city, region, country, lat, lon, isp, ua, first_seen, last_seen, hits) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, 1) " +
-        "ON CONFLICT(ip) DO UPDATE SET city = ?2, region = ?3, country = ?4, lat = ?5, lon = ?6, isp = ?7, ua = ?8, last_seen = ?9, hits = hits + 1"
+      "INSERT INTO visits (ip, city, region, country, lat, lon, isp, ua, referrer, tz, lang, screen, viewport, first_seen, last_seen, hits) " +
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14, ?9, ?9, 1) " +
+        "ON CONFLICT(ip) DO UPDATE SET city = ?2, region = ?3, country = ?4, lat = ?5, lon = ?6, isp = ?7, ua = ?8, " +
+        "referrer = ?10, tz = ?11, lang = ?12, screen = ?13, viewport = ?14, last_seen = ?9, hits = hits + 1"
     )
-    .bind(ip, cf.city || "", cf.region || "", cf.country || "", lat, lon, String(cf.asOrganization || "").slice(0, 120), ua, t)
+    .bind(ip, cf.city || "", cf.region || "", cf.country || "", lat, lon, String(cf.asOrganization || "").slice(0, 120), ua, t, referrer, tz, lang, screen, viewport)
     .run();
   if (Math.random() < 0.05) {
     await db.prepare("DELETE FROM visits WHERE last_seen < ?").bind(t - VISIT_DAYS * 86400).run();
   }
 }
 
+// columns added after the visits table first shipped; ALTER is a no-op if already present
+const MIGRATIONS = ["referrer", "tz", "lang", "screen", "viewport"].map(
+  (c) => `ALTER TABLE visits ADD COLUMN ${c} TEXT`
+);
+
 let schemaReady = null;
 function ensureSchema(db) {
   if (!schemaReady) {
-    schemaReady = db.batch(SCHEMA.map((s) => db.prepare(s))).catch((e) => {
+    schemaReady = (async () => {
+      await db.batch(SCHEMA.map((s) => db.prepare(s)));
+      for (const m of MIGRATIONS) {
+        try { await db.prepare(m).run(); } catch (e) { /* column already exists */ }
+      }
+    })().catch((e) => {
       schemaReady = null;
       throw e;
     });
@@ -155,10 +174,14 @@ async function handleApi(request, env) {
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const method = request.method;
 
-  if (route === "whoami" && method === "GET") {
+  if (route === "whoami" && (method === "GET" || method === "POST")) {
     const cf = request.cf || {};
+    let extra = {};
+    if (method === "POST") {
+      try { extra = (await request.json()) || {}; } catch (e) { extra = {}; }
+    }
     if (env.DB) {
-      try { await logVisit(request, env.DB); } catch (e) {}
+      try { await logVisit(request, env.DB, extra); } catch (e) {}
     }
     return json({
       ip: request.headers.get("cf-connecting-ip") || "",
@@ -341,7 +364,7 @@ async function handleApi(request, env) {
       const user = await currentUser(request, db);
       if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
       const { results } = await db
-        .prepare("SELECT ip, city, region, country, lat, lon, isp, ua, first_seen, last_seen, hits FROM visits ORDER BY last_seen DESC LIMIT 2000")
+        .prepare("SELECT ip, city, region, country, lat, lon, isp, ua, referrer, tz, lang, screen, viewport, first_seen, last_seen, hits FROM visits ORDER BY last_seen DESC LIMIT 2000")
         .all();
       const totals = await db.prepare("SELECT COUNT(*) AS visitors, COALESCE(SUM(hits), 0) AS hits, SUM(last_seen > ?) AS today FROM visits").bind(now() - 86400).first();
       return json({ visits: results, totals, days: VISIT_DAYS });
