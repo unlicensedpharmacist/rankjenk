@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>RankJenk.com :: Owner Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+<style>
+  .dash { max-width: 1100px; margin: 0 auto; padding: 12px 0 40px; display: flex; flex-direction: column; gap: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { text-align: center; }
+  .stat .counter { display: block; font-size: 30px; }
+  #map { height: 380px; border: 2px inset #6b5536; background: #1a1006; }
+  .vtable-wrap { overflow-x: auto; }
+  .vtable { width: 100%; border-collapse: collapse; font-size: 12px; background: rgba(240,225,190,.5); border: 2px ridge #6b5536; }
+  .vtable th { background: linear-gradient(#3b2a17, #120802); color: #ff3b3b; font: 17px VT323, "Courier New", monospace; text-align: left; padding: 3px 6px; white-space: nowrap; cursor: pointer; }
+  .vtable td { padding: 5px 6px; border-bottom: 1px dashed #6b5536; vertical-align: top; }
+  .vtable tr:nth-child(even) td { background: rgba(90,60,20,.15); }
+  .vtable tr.sel td { background: rgba(160,0,0,.25); }
+  .vtable .ip { font: 15px VT323, "Courier New", monospace; color: #5a0000; white-space: nowrap; }
+  .vtable .num { text-align: center; }
+  .vtable .ua { font-size: 10px; color: #4a3418; max-width: 220px; }
+  .filter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .filter input { flex: 1 1 200px; }
+  #gate { text-align: center; }
+  @media (max-width: 600px) { .stats { grid-template-columns: 1fr; } #map { height: 280px; } }
+</style>
+</head>
+<body>
+
+<div id="topbar">&#9733; RankJenk Owner Dashboard &#9733; <a href="index.html">back to the site</a></div>
+
+<header>
+  <div class="logo-wrap">
+    <h1 class="logo"><a href="index.html" style="color:inherit;text-decoration:none;background:none">Rank<span>Jenk</span><small>.com</small></a></h1>
+  </div>
+  <p class="tagline">OWNER DASHBOARD</p>
+</header>
+
+<div class="dash">
+  <section class="box" id="gate">
+    <h2>OWNER ONLY</h2>
+    <p id="gate-msg">Checking who you are...</p>
+  </section>
+
+  <div id="dash" hidden>
+    <div class="stats">
+      <section class="box stat"><h3>UNIQUE VISITORS</h3><span class="counter" id="t-visitors">0</span></section>
+      <section class="box stat"><h3>TOTAL PAGE LOADS</h3><span class="counter" id="t-hits">0</span></section>
+      <section class="box stat"><h3>LAST 24 HOURS</h3><span class="counter" id="t-today">0</span></section>
+    </div>
+
+    <section class="box" style="margin-top:16px">
+      <h2>VISITOR MAP</h2>
+      <div id="map"></div>
+      <p class="tiny">Locations come from Cloudflare's IP lookup. They're city-level guesses and are often off by miles, or show the internet provider's location instead.</p>
+    </section>
+
+    <section class="box" style="margin-top:16px">
+      <h2>VISITOR LOG</h2>
+      <div class="filter">
+        <input id="q" type="text" placeholder="filter by IP, city, country, provider...">
+        <button class="btn small" id="refresh" type="button">REFRESH</button>
+        <span class="tiny" id="status"></span>
+      </div>
+      <div class="vtable-wrap">
+        <table class="vtable">
+          <thead><tr>
+            <th data-k="ip">IP</th><th data-k="place">Location</th><th data-k="lat">Coordinates</th>
+            <th data-k="isp">Provider</th><th data-k="hits" class="num">Visits</th>
+            <th data-k="first_seen">First seen</th><th data-k="last_seen">Last seen</th><th>Device</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="tiny" id="keep"></p>
+    </section>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+  function when(t) { return t ? new Date(t * 1000).toLocaleString() : ""; }
+  function regionName(code) { try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code); } catch (e) { return code; } }
+  function place(v) { return [v.city, v.region, v.country ? regionName(v.country) : ""].filter(Boolean).join(", "); }
+  function device(ua) {
+    ua = ua || "";
+    var os = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    var br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
+    if (/bot|crawl|spider|preview/i.test(ua)) return "bot";
+    return [br, os].filter(Boolean).join(" on ") || "unknown";
+  }
+  function api(path) {
+    return fetch("/api/" + path, { credentials: "same-origin" }).then(function (r) {
+      return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || "Server error."); return d; });
+    });
+  }
+
+  var data = [], sortKey = "last_seen", sortDir = -1, map = null, layer = null, markers = {};
+
+  function initMap() {
+    if (map || !window.L) return;
+    map = L.map("map", { worldCopyJump: true }).setView([30, 0], 2);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 18, attribution: "&copy; OpenStreetMap &copy; CARTO"
+    }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+
+  function drawMap(list) {
+    initMap();
+    if (!map) return;
+    layer.clearLayers(); markers = {};
+    var pts = [];
+    list.forEach(function (v) {
+      if (v.lat == null || v.lon == null) return;
+      var m = L.circleMarker([v.lat, v.lon], { radius: 6 + Math.min(10, Math.log2(v.hits + 1) * 2), color: "#ff2a2a", weight: 1, fillColor: "#a30000", fillOpacity: .7 })
+        .bindPopup("<b>" + esc(v.ip) + "</b><br>" + esc(place(v)) + "<br>" + v.hits + " visit" + (v.hits === 1 ? "" : "s") + "<br>last: " + esc(when(v.last_seen)));
+      m.addTo(layer); markers[v.ip] = m; pts.push([v.lat, v.lon]);
+    });
+    if (pts.length === 1) map.setView(pts[0], 6);
+    else if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 });
+  }
+
+  function render() {
+    var q = $("q").value.trim().toLowerCase();
+    var list = data.filter(function (v) {
+      return !q || [v.ip, place(v), v.isp, device(v.ua)].join(" ").toLowerCase().indexOf(q) !== -1;
+    });
+    list.sort(function (a, b) {
+      var x = sortKey === "place" ? place(a) : a[sortKey], y = sortKey === "place" ? place(b) : b[sortKey];
+      return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+    });
+    $("rows").innerHTML = list.length ? list.map(function (v) {
+      var coords = v.lat != null ? v.lat.toFixed(4) + ", " + v.lon.toFixed(4) : "";
+      return "<tr data-ip=\"" + esc(v.ip) + "\"><td class=\"ip\">" + esc(v.ip) + "</td><td>" + esc(place(v)) + "</td>" +
+        "<td>" + (coords ? "<a href=\"#\" class=\"go\">" + esc(coords) + "</a>" : "") + "</td>" +
+        "<td>" + esc(v.isp) + "</td><td class=\"num\">" + v.hits + "</td>" +
+        "<td class=\"tiny\">" + esc(when(v.first_seen)) + "</td><td class=\"tiny\">" + esc(when(v.last_seen)) + "</td>" +
+        "<td class=\"ua\" title=\"" + esc(v.ua) + "\">" + esc(device(v.ua)) + "</td></tr>";
+    }).join("") : "<tr><td colspan=\"8\" class=\"tiny\">No visitors logged yet.</td></tr>";
+    drawMap(list);
+  }
+
+  function load() {
+    $("status").textContent = "Loading...";
+    api("visits").then(function (d) {
+      data = d.visits || [];
+      $("t-visitors").textContent = d.totals.visitors || 0;
+      $("t-hits").textContent = d.totals.hits || 0;
+      $("t-today").textContent = d.totals.today || 0;
+      $("keep").textContent = "Each visitor is kept for " + d.days + " days after their last visit, then deleted automatically.";
+      $("status").textContent = "Updated " + new Date().toLocaleTimeString();
+      render();
+    }).catch(function (e) { $("status").textContent = e.message; });
+  }
+
+  $("q").addEventListener("input", render);
+  $("refresh").addEventListener("click", load);
+  document.querySelector(".vtable thead").addEventListener("click", function (e) {
+    var k = e.target.getAttribute("data-k");
+    if (!k) return;
+    sortDir = k === sortKey ? -sortDir : (k === "ip" || k === "place" || k === "isp" ? 1 : -1);
+    sortKey = k;
+    render();
+  });
+  $("rows").addEventListener("click", function (e) {
+    var tr = e.target.closest("tr");
+    if (!tr || !e.target.classList.contains("go")) return;
+    e.preventDefault();
+    var m = markers[tr.getAttribute("data-ip")];
+    if (m && map) { map.setView(m.getLatLng(), 9); m.openPopup(); $("map").scrollIntoView({ behavior: "smooth" }); }
+  });
+
+  api("me").then(function (d) {
+    if (d.user && d.user.owner) {
+      $("gate").hidden = true;
+      $("dash").hidden = false;
+      load();
+      setInterval(function () { if (!document.hidden) load(); }, 60000);
+    } else {
+      $("gate-msg").innerHTML = "This page is for the site owner. <a href=\"index.html\">Log in on the home page</a> as the owner, then come back.";
+    }
+  }).catch(function () { $("gate-msg").textContent = "Can't reach the server right now."; });
+})();
+</script>
+<script src="grime.js"></script>
+</body>
+</html>

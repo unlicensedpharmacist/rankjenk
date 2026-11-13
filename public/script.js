@@ -403,6 +403,7 @@
     $("account-user").hidden = !u;
     $("whoami").textContent = u ? u.name : "";
     $("whoami-tag").hidden = !(u && u.owner);
+    $("owner-link").hidden = !(u && u.owner);
     $("board-name-wrap").hidden = !!u;
     $("board-register").hidden = !!u;
     $("board-as").hidden = !u;
