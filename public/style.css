@@ -483,7 +483,6 @@ footer .tiny { font-size: 14px; }
   aside.right > * { flex: 1 1 140px; }
   .spin-badge { position: absolute; top: 0; left: 0; width: 50px; height: 50px; font-size: 13px; z-index: 2; }
   .spin-badge.right { left: auto; right: 0; }
-  .logo-wrap { padding: 34px 0 0; }
   .logo { font-size: 17vw; letter-spacing: 2px; }
   .bloodlayer { transform: scale(.8); }
 }
