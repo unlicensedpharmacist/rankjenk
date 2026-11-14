@@ -68,6 +68,7 @@
     setTimeout(function () { $("popup").hidden = false; }, 14000);
     setTimeout(showIpPopup, 20000);
     setTimeout(showSocialPopup, 26000);
+    setTimeout(function () { $("photo-popup").hidden = false; }, 34000);
     randomOverwatch();
   }
 
@@ -159,6 +160,7 @@
   $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); stopAlarm(); $("ip-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
+  $("photo-close").addEventListener("click", function () { $("photo-popup").hidden = true; });
 
   var dodges = 0;
   $("popup-close").addEventListener("mouseover", function () {
