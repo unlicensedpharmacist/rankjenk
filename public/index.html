@@ -300,6 +300,21 @@
 
 <div id="red-flash" aria-hidden="true"></div>
 
+<div id="vad" class="vad" hidden role="dialog" aria-label="Video ad">
+  <a id="vad-link" class="vad-screen" href="#" target="_blank" rel="noopener">
+    <img id="vad-img" alt="">
+    <span class="vad-play">&#9654;</span>
+    <span class="vad-title" id="vad-title"></span>
+    <span class="vad-cta blink">CLICK TO WATCH!!!</span>
+  </a>
+  <div class="vad-bar">
+    <span class="vad-label">Ad</span> <span class="vad-count">1 of 1</span> &middot; <span id="vad-time">0:10</span>
+    <a id="vad-visit" class="vad-visit" href="#" target="_blank" rel="noopener">Visit advertiser &#8599;</a>
+  </div>
+  <div class="vad-progress"><i id="vad-prog"></i></div>
+  <button id="vad-skip" class="vad-skip" type="button" disabled>You can skip this ad in 10</button>
+</div>
+
 <div id="ip-popup" class="modal" hidden>
   <div class="modal-box ip-box">
     <button class="x" id="ip-close" type="button">X</button>

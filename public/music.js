@@ -96,7 +96,10 @@
     if (!audio.paused) { try { sessionStorage.setItem("rj_music_pos", String(audio.currentTime)); } catch (e) {} }
   }, 1000);
 
+  /* music lock: members whose tag (or the site default) doesn't allow it can't pause or turn down the music */
+  var allowed = true;
   btn.addEventListener("click", function () {
+    if (!allowed) { if (audio.paused) start(); return; }
     if (audio.paused) { setPref("on"); stopBg(); start(); } else { setPref("off"); audio.pause(); playBg(); }
   });
   if (many) {
@@ -116,10 +119,28 @@
   setVolume();
 
   function autoplay() {
-    if (pref() === "off") playBg();
-    else if (audio.paused) start();
+    if (pref() === "off" && allowed) playBg();
+    else if (audio.paused) { stopBg(); start(); }
   }
-  window.RJMusic = { autoplay: autoplay };
+  function setAllowed(ok) {
+    ok = ok !== false;
+    if (ok === allowed) return;
+    allowed = ok;
+    box.classList.toggle("locked", !ok);
+    volInput.disabled = !ok;
+    btn.title = ok ? "" : "Your tag can't turn the music off";
+    if (!ok) {
+      volInput.value = Math.max(volInput.value, 50);
+      setVolume();
+      if (audio.paused && !bg.paused) { stopBg(); start(); }
+      btn.textContent = "LOCKED";
+    } else {
+      render();
+    }
+  }
+  audio.addEventListener("pause", function () { if (!allowed) btn.textContent = "LOCKED"; });
+  audio.addEventListener("play", function () { if (!allowed) btn.textContent = "LOCKED"; });
+  window.RJMusic = { autoplay: autoplay, setAllowed: setAllowed };
 
   autoplay();
   ["pointerdown", "keydown", "touchend", "click"].forEach(function (name) {
