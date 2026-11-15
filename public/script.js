@@ -75,6 +75,7 @@
     setTimeout(annoy(function () { $("photo-popup").hidden = false; }), 34000);
     setTimeout(checkLive, 5000);
     scheduleVideoAd(45000);
+    scheduleSplat(1500 + Math.random() * 2500);
     scheduleAd(12000);
     randomOverwatch();
   }
@@ -319,6 +320,63 @@
     }
     $("vad").hidden = true;
   });
+
+  /* ---------- jenkem splats ----------
+     brown + piss-yellow goo hits the screen at random spots and random times, drips down, then fades.
+     A random number generator picks when, where, how big, what color, and how many at once.
+     Skipped for the owner and anyone whose tag has "no popups". Never blocks clicks. */
+  var JENK = ["#4a2e0c", "#5e3b10", "#6b4a1a", "#3a2408", "#7a5a18", "#8a6a12", "#b8962a", "#c9a227", "#a68a1e"];
+  var splatLayer = document.createElement("div");
+  splatLayer.className = "splat-layer";
+  splatLayer.setAttribute("aria-hidden", "true");
+  document.body.appendChild(splatLayer);
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function scheduleSplat(ms) {
+    setTimeout(function () {
+      if (!document.hidden && !perms().no_popups) {
+        var n = Math.random() < 0.25 ? 2 + Math.floor(Math.random() * 3) : 1; // sometimes a burst
+        for (var i = 0; i < n; i++) setTimeout(splat, i * rnd(120, 450));
+      }
+      scheduleSplat(rnd(2000, 10000));
+    }, ms);
+  }
+  function blob(parent, css) {
+    var b = document.createElement("i");
+    b.style.cssText = css;
+    parent.appendChild(b);
+    return b;
+  }
+  function splat() {
+    if (splatLayer.children.length >= 10) return;
+    var color = pick(JENK), size = rnd(70, 220);
+    var s = document.createElement("div");
+    s.className = "splat";
+    s.style.cssText = "left:" + rnd(-5, 90) + "vw;top:" + rnd(-5, 80) + "vh;width:" + size + "px;height:" + size + "px;color:" + color +
+      "";
+    var goo = document.createElement("div");
+    goo.className = "splat-goo";
+    goo.style.rotate = rnd(0, 360) + "deg"; // spin the puddle, but drips still fall straight down
+    s.appendChild(goo);
+    // main puddle + lumps around it
+    blob(goo, "left:20%;top:20%;width:60%;height:" + rnd(50, 65) + "%;border-radius:" + rnd(40, 60) + "% " + rnd(45, 70) + "% " + rnd(40, 65) + "% " + rnd(50, 70) + "%");
+    for (var k = 0, n = 5 + Math.floor(Math.random() * 6); k < n; k++) {
+      var a = rnd(0, Math.PI * 2), d = rnd(22, 46), r = rnd(8, 22);
+      blob(goo, "left:" + (50 + Math.cos(a) * d - r / 2) + "%;top:" + (50 + Math.sin(a) * d - r / 2) + "%;width:" + r + "%;height:" + r * rnd(.7, 1.3) + "%");
+    }
+    // flung droplets
+    for (var j = 0, m = 6 + Math.floor(Math.random() * 10); j < m; j++) {
+      var a2 = rnd(0, Math.PI * 2), d2 = rnd(48, 85), r2 = rnd(2, 6);
+      blob(s, "left:" + (50 + Math.cos(a2) * d2) + "%;top:" + (50 + Math.sin(a2) * d2) + "%;width:" + r2 + "%;height:" + r2 + "%;animation-delay:" + rnd(0, .12) + "s");
+    }
+    // drips that run down the screen
+    for (var q = 0, dn = 1 + Math.floor(Math.random() * 3); q < dn; q++) {
+      blob(s, "left:" + rnd(30, 65) + "%;top:55%;width:" + rnd(3, 7) + "%;--len:" + rnd(60, 180) + "px;animation-delay:" + rnd(.3, 1.2) + "s").className = "drip";
+    }
+    splatLayer.appendChild(s);
+    setTimeout(function () { s.classList.add("gone"); }, rnd(6000, 11000));
+    setTimeout(function () { s.remove(); }, 13000);
+  }
 
   $("live-close").addEventListener("click", function () { $("live-popup").hidden = true; });
 
