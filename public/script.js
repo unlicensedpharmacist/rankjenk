@@ -325,7 +325,9 @@
      brown + piss-yellow goo hits the screen at random spots and random times, drips down, then fades.
      A random number generator picks when, where, how big, what color, and how many at once.
      Skipped for the owner and anyone whose tag has "no popups". Never blocks clicks. */
-  var JENK = ["#4a2e0c", "#5e3b10", "#6b4a1a", "#3a2408", "#7a5a18", "#8a6a12", "#b8962a", "#c9a227", "#a68a1e"];
+  var BROWN = ["#4a2e0c", "#5e3b10", "#6b4a1a", "#3a2408", "#7a5a18"];
+  var YELLOW = ["#8a6a12", "#b8962a", "#c9a227", "#a68a1e"];
+  var JENK = BROWN.concat(YELLOW);
   var splatLayer = document.createElement("div");
   splatLayer.className = "splat-layer";
   splatLayer.setAttribute("aria-hidden", "true");
@@ -374,6 +376,7 @@
       blob(s, "left:" + rnd(30, 65) + "%;top:55%;width:" + rnd(3, 7) + "%;--len:" + rnd(60, 180) + "px;animation-delay:" + rnd(.3, 1.2) + "s").className = "drip";
     }
     splatLayer.appendChild(s);
+    if (BROWN.indexOf(color) !== -1) playSound(sounds.overwatch); // every brown splat gets the overwatch sound
     setTimeout(function () { s.classList.add("gone"); }, rnd(6000, 11000));
     setTimeout(function () { s.remove(); }, 13000);
   }
