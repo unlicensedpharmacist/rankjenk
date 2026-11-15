@@ -14,11 +14,6 @@
 
   var audio = new Audio();
 
-  /* background track: plays whenever the regular music is turned off */
-  var BG = { file: "music/doxbin.mp3", title: "You're on Doxbin" };
-  var bg = new Audio(BG.file);
-  bg.loop = true;
-  bg.preload = "auto";
   audio.preload = "none";
   audio.volume = 0.5;
   audio.loop = PLAYLIST.length === 1;
@@ -57,13 +52,25 @@
   function showTrack() {
     now.textContent = "now playing: " + PLAYLIST[idx].title + (many ? " (" + (idx + 1) + "/" + PLAYLIST.length + ")" : "");
   }
-  function playBg() {
-    if (!audio.paused || !bg.paused) return;
-    now.textContent = "background: " + BG.title;
-    var p = bg.play();
-    if (p && p.catch) p.catch(function () {});
+  /* iPhones ignore audio.volume, so when that's the case the volume goes through a Web Audio gain node instead.
+     It's set up on the first tap (browsers only allow audio setup after a tap). */
+  var volumeWorks = (function () { var t = new Audio(); t.volume = 0.5; return t.volume === 0.5; })();
+  var actx = null, gain = null;
+  function ensureGain() {
+    if (volumeWorks) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      if (!actx) {
+        actx = new AC();
+        gain = actx.createGain();
+        actx.createMediaElementSource(audio).connect(gain);
+        gain.connect(actx.destination);
+        setVolume();
+      }
+      if (actx.state === "suspended") actx.resume();
+    } catch (e) { volumeWorks = true; }
   }
-  function stopBg() { if (!bg.paused) bg.pause(); }
 
   function load(i) {
     idx = i;
@@ -72,6 +79,7 @@
     try { sessionStorage.setItem("rj_music_idx", String(i)); sessionStorage.setItem("rj_music_pos", "0"); } catch (e) {}
   }
   function start() {
+    ensureGain();
     var p = audio.play();
     if (p && p.catch) p.catch(function () {});
   }
@@ -89,8 +97,8 @@
     if (resumeAt > 0 && resumeAt < audio.duration) audio.currentTime = resumeAt;
     resumeAt = 0;
   });
-  audio.addEventListener("play", function () { stopBg(); showTrack(); render(); });
-  audio.addEventListener("pause", render);
+  audio.addEventListener("play", function () { showTrack(); render(); });
+  audio.addEventListener("pause", function () { render(); now.textContent = "music off"; });
   audio.addEventListener("ended", function () { go(1); });
   setInterval(function () {
     if (!audio.paused) { try { sessionStorage.setItem("rj_music_pos", String(audio.currentTime)); } catch (e) {} }
@@ -100,7 +108,7 @@
   var allowed = true;
   btn.addEventListener("click", function () {
     if (!allowed) { if (audio.paused) start(); return; }
-    if (audio.paused) { setPref("on"); stopBg(); start(); } else { setPref("off"); audio.pause(); playBg(); }
+    if (audio.paused) { setPref("on"); start(); } else { setPref("off"); audio.pause(); }
   });
   if (many) {
     document.getElementById("mp-next").addEventListener("click", function () { setPref("on"); go(1); });
@@ -111,16 +119,16 @@
   }
   var volInput = document.getElementById("mp-vol");
   function setVolume() {
-    audio.volume = volInput.value / 100;
-    bg.volume = volInput.value / 100;
+    var v = volInput.value / 100;
+    if (gain) { gain.gain.value = v; audio.volume = 1; } else audio.volume = v;
     volInput.style.setProperty("--fill", volInput.value + "%");
   }
-  volInput.addEventListener("input", setVolume);
+  volInput.addEventListener("input", function () { ensureGain(); setVolume(); });
   setVolume();
 
   function autoplay() {
-    if (pref() === "off" && allowed) playBg();
-    else if (audio.paused) { stopBg(); start(); }
+    if (pref() === "off" && allowed) { ensureGain(); return; } // they turned it off: stay silent
+    if (audio.paused) start();
   }
   function setAllowed(ok) {
     ok = ok !== false;
@@ -132,7 +140,7 @@
     if (!ok) {
       volInput.value = Math.max(volInput.value, 50);
       setVolume();
-      if (audio.paused && !bg.paused) { stopBg(); start(); }
+      if (audio.paused) start();
       btn.textContent = "LOCKED";
     } else {
       render();
