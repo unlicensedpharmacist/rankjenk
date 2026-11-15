@@ -75,7 +75,7 @@
     setTimeout(annoy(function () { $("photo-popup").hidden = false; }), 34000);
     setTimeout(checkLive, 5000);
     scheduleVideoAd(45000);
-    scheduleSplat(4000 + Math.random() * 8000);
+    scheduleSplat(1500 + Math.random() * 2500);
     scheduleAd(12000);
     randomOverwatch();
   }
@@ -326,7 +326,7 @@
         var n = Math.random() < 0.25 ? 2 + Math.floor(Math.random() * 3) : 1; // sometimes a burst
         for (var i = 0; i < n; i++) setTimeout(splat, i * rnd(120, 450));
       }
-      scheduleSplat(rnd(7000, 35000));
+      scheduleSplat(rnd(2000, 10000));
     }, ms);
   }
   function blob(parent, css) {
@@ -336,7 +336,7 @@
     return b;
   }
   function splat() {
-    if (splatLayer.children.length >= 8) return;
+    if (splatLayer.children.length >= 10) return;
     var color = pick(JENK), size = rnd(70, 220);
     var s = document.createElement("div");
     s.className = "splat";
