@@ -18,6 +18,7 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_replies_thread ON replies (thread_id)",
   "CREATE TABLE IF NOT EXISTS visits (ip TEXT PRIMARY KEY, city TEXT, region TEXT, country TEXT, lat REAL, lon REAL, isp TEXT, ua TEXT, referrer TEXT, tz TEXT, lang TEXT, screen TEXT, viewport TEXT, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, hits INTEGER NOT NULL DEFAULT 1)",
   "CREATE INDEX IF NOT EXISTS idx_visits_last ON visits (last_seen)",
+  "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, color TEXT NOT NULL, text_color TEXT NOT NULL, effect TEXT NOT NULL DEFAULT 'none', highlight INTEGER NOT NULL DEFAULT 0, can_pin INTEGER NOT NULL DEFAULT 0, can_highlight INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)",
 ];
 
@@ -76,6 +77,8 @@ const MIGRATIONS = ["referrer", "tz", "lang", "screen", "viewport"]
     "ALTER TABLE users ADD COLUMN tag_id INTEGER",
     "ALTER TABLE threads ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE threads ADD COLUMN highlighted INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE tags ADD COLUMN can_music INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE tags ADD COLUMN no_popups INTEGER NOT NULL DEFAULT 0",
   ]);
 
 let schemaReady = null;
@@ -127,12 +130,27 @@ const isOwner = (u) => !!u && u.name.toLowerCase() === OWNER_NAME;
 const canPin = (u) => isOwner(u) || !!(u && u.tag_pin);
 const canHighlight = (u) => isOwner(u) || !!(u && u.tag_hlt);
 
-function publicUser(u) {
-  const owner = isOwner(u);
-  return { name: u.name, owner, tag: tagOf(u, owner), can_pin: canPin(u), can_highlight: canHighlight(u) };
+/* "everyone else" rules: apply to guests and to members without a tag */
+const SETTING_DEFAULTS = { everyone_music: "1", everyone_nopopups: "0" };
+async function getSettings(db) {
+  const out = { ...SETTING_DEFAULTS };
+  const { results } = await db.prepare("SELECT key, value FROM settings").all();
+  for (const r of results) if (r.key in out) out[r.key] = r.value;
+  return { can_music: out.everyone_music === "1", no_popups: out.everyone_nopopups === "1" };
+}
+// music + popup powers: owner gets everything, tagged members get their tag's rules, everyone else the site default
+function perks(u, everyone) {
+  if (isOwner(u)) return { can_music: true, no_popups: true };
+  if (u && u.tag_label) return { can_music: !!u.tag_music, no_popups: !!u.tag_nopop };
+  return { ...everyone };
 }
 
-const USER_COLS = "u.id, u.name, " + TAG_COLS + ", g.can_pin AS tag_pin, g.can_highlight AS tag_hlt";
+function publicUser(u, everyone) {
+  const owner = isOwner(u);
+  return { name: u.name, owner, tag: tagOf(u, owner), can_pin: canPin(u), can_highlight: canHighlight(u), ...perks(u, everyone) };
+}
+
+const USER_COLS = "u.id, u.name, " + TAG_COLS + ", g.can_pin AS tag_pin, g.can_highlight AS tag_hlt, g.can_music AS tag_music, g.no_popups AS tag_nopop";
 
 function readToken(request) {
   const m = (request.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + COOKIE + "=([a-f0-9]+)"));
@@ -180,7 +198,7 @@ const asTag = (b) => {
   if (!label) return { error: "Tag text must be 1-24 characters." };
   if (!HEX_RE.test(b.color || "") || !HEX_RE.test(b.text_color || "")) return { error: "Pick the tag colors." };
   if (!EFFECTS.includes(b.effect)) return { error: "Pick an effect." };
-  return { label, color: b.color, text_color: b.text_color, effect: b.effect, highlight: b.highlight ? 1 : 0, can_pin: b.can_pin ? 1 : 0, can_highlight: b.can_highlight ? 1 : 0 };
+  return { label, color: b.color, text_color: b.text_color, effect: b.effect, highlight: b.highlight ? 1 : 0, can_pin: b.can_pin ? 1 : 0, can_highlight: b.can_highlight ? 1 : 0, can_music: b.can_music ? 1 : 0, no_popups: b.no_popups ? 1 : 0 };
 };
 
 async function resolveAuthor(request, db, body) {
@@ -297,7 +315,8 @@ async function handleApi(request, env) {
 
     if (route === "me" && method === "GET") {
       const user = await currentUser(request, db);
-      return json({ user: user ? publicUser(user) : null });
+      const everyone = await getSettings(db);
+      return json({ user: user ? publicUser(user, everyone) : null, everyone });
     }
 
     if (route === "register" && method === "POST") {
@@ -319,7 +338,7 @@ async function handleApi(request, env) {
         }
         throw e;
       }
-      return json({ user: publicUser({ name }) }, 201, await startSession(db, id));
+      return json({ user: publicUser({ name }, await getSettings(db)) }, 201, await startSession(db, id));
     }
 
     if (route === "login" && method === "POST") {
@@ -332,7 +351,7 @@ async function handleApi(request, env) {
       const ok = rec ? await checkPassword(password, rec.pass) : (await hashPassword(password), false);
       if (!ok) return json({ error: "Wrong username or password." }, 401);
       await db.prepare("DELETE FROM sessions WHERE expires < ?").bind(now()).run();
-      return json({ user: publicUser(rec) }, 200, await startSession(db, rec.id));
+      return json({ user: publicUser(rec, await getSettings(db)) }, 200, await startSession(db, rec.id));
     }
 
     if (route === "logout" && method === "POST") {
@@ -489,7 +508,7 @@ async function handleApi(request, env) {
       const { results } = await db
         .prepare("SELECT g.*, (SELECT COUNT(*) FROM users u WHERE u.tag_id = g.id) AS members FROM tags g ORDER BY g.id ASC")
         .all();
-      return json({ tags: results, effects: EFFECTS });
+      return json({ tags: results, effects: EFFECTS, everyone: await getSettings(db) });
     }
 
     if (route === "tags" && method === "POST") {
@@ -497,22 +516,30 @@ async function handleApi(request, env) {
       if (!isOwner(user)) return json({ error: "Owner only." }, 403);
       const t = asTag(body);
       if (t.error) return json({ error: t.error }, 400);
-      const vals = [t.label, t.color, t.text_color, t.effect, t.highlight, t.can_pin, t.can_highlight];
+      const vals = [t.label, t.color, t.text_color, t.effect, t.highlight, t.can_pin, t.can_highlight, t.can_music, t.no_popups];
       if (body.id != null) {
         const id = Number(body.id);
         if (!Number.isInteger(id)) return json({ error: "Bad request." }, 400);
         const res = await db
-          .prepare("UPDATE tags SET label = ?, color = ?, text_color = ?, effect = ?, highlight = ?, can_pin = ?, can_highlight = ? WHERE id = ?")
+          .prepare("UPDATE tags SET label = ?, color = ?, text_color = ?, effect = ?, highlight = ?, can_pin = ?, can_highlight = ?, can_music = ?, no_popups = ? WHERE id = ?")
           .bind(...vals, id)
           .run();
         if (!res.meta.changes) return json({ error: "No such tag." }, 404);
         return json({ ok: true, id });
       }
       const res = await db
-        .prepare("INSERT INTO tags (label, color, text_color, effect, highlight, can_pin, can_highlight, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .prepare("INSERT INTO tags (label, color, text_color, effect, highlight, can_pin, can_highlight, can_music, no_popups, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(...vals, now())
         .run();
       return json({ ok: true, id: res.meta.last_row_id }, 201);
+    }
+
+    if (route === "settings" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!isOwner(user)) return json({ error: "Owner only." }, 403);
+      const put = (k, v) => db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(k, v ? "1" : "0");
+      await db.batch([put("everyone_music", body.can_music), put("everyone_nopopups", body.no_popups)]);
+      return json({ ok: true, everyone: await getSettings(db) });
     }
 
     if (route === "tagdelete" && method === "POST") {

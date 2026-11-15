@@ -23,6 +23,8 @@
   var cart = {};
   var coupon = false;
   var user = null;
+  var everyone = { can_music: true, no_popups: false }; // rules for guests + members without a tag
+  function perms() { return user || everyone; }
 
   function money(n) { return "$" + n.toFixed(2); }
   function stars(n) { return "★★★★★".slice(0, n) + "☆☆☆☆☆".slice(0, 5 - n); }
@@ -61,15 +63,19 @@
     $("splash-pct").textContent = pct;
     $("splash-bar").style.width = pct + "%";
   }, 180);
+  /* popups are skipped for anyone whose tag (or the site default) says "no popups"; the owner never gets them */
+  function annoy(fn) { return function () { if (!perms().no_popups) fn(); }; }
   function closeSplash() {
     $("splash").style.display = "none";
     if (window.RJMusic) window.RJMusic.autoplay();
-    setTimeout(function () { $("code-popup").hidden = false; }, 1500);
-    setTimeout(function () { $("popup").hidden = false; }, 14000);
-    setTimeout(showIpPopup, 20000);
-    setTimeout(showSocialPopup, 26000);
-    setTimeout(function () { $("photo-popup").hidden = false; }, 34000);
+    setTimeout(annoy(function () { $("code-popup").hidden = false; }), 1500);
+    setTimeout(annoy(function () { $("popup").hidden = false; }), 14000);
+    setTimeout(annoy(showIpPopup), 20000);
+    setTimeout(annoy(showSocialPopup), 26000);
+    setTimeout(annoy(function () { $("photo-popup").hidden = false; }), 34000);
     setTimeout(checkLive, 5000);
+    scheduleVideoAd(45000);
+    scheduleAd(12000);
     randomOverwatch();
   }
 
@@ -176,6 +182,132 @@
     }).catch(function () {});
     if (!liveTimer) liveTimer = setInterval(function () { if (!document.hidden) checkLive(); }, 120000);
   }
+  /* ---------- flying YouTube ad popups ----------
+     The sidebar's YouTube ads also bounce around the whole screen. The X dodges a few taps before it closes.
+     Never shown to the owner, and never on the FORUM or SHOUTBOX tabs. */
+  var YT_ADS = [].map.call(document.querySelectorAll("aside.right .ad-yt"), function (a) {
+    var img = a.querySelector("img"), b = a.querySelector("b");
+    return { href: a.href, img: img ? img.src : "", title: b ? b.textContent : "" };
+  });
+  var flyers = [], flyRaf = 0, flyLast = 0, adTurn = 0;
+  var DODGE_TEXT = ["nope", "too slow", "almost!", "X"];
+  function adsAllowed() { return !(user && user.owner) && currentTab === "home"; }
+  function scheduleAd(ms) { setTimeout(function () { spawnAd(); scheduleAd(35000 + Math.random() * 30000); }, ms); }
+
+  function spawnAd() {
+    if (!YT_ADS.length || !adsAllowed() || document.hidden || flyers.length >= 2) return;
+    var ad = YT_ADS[adTurn++ % YT_ADS.length];
+    var el = document.createElement("div");
+    el.className = "fly-ad";
+    el.innerHTML = '<button class="x fly-x" type="button" aria-label="Close ad">X</button>' +
+      '<a target="_blank" rel="noopener"><span class="ad-tag">AD</span><img alt=""><b></b><span class="blink">WATCH NOW!!!</span></a>';
+    el.querySelector("a").href = ad.href;
+    el.querySelector("img").src = ad.img;
+    el.querySelector("b").textContent = ad.title;
+    document.body.appendChild(el);
+    var w = el.offsetWidth, h = el.offsetHeight;
+    var f = {
+      el: el, w: w, h: h, dodges: 0,
+      x: Math.random() * Math.max(1, innerWidth - w), y: Math.random() * Math.max(1, innerHeight - h),
+      vx: (Math.random() < .5 ? -1 : 1) * (110 + Math.random() * 80),
+      vy: (Math.random() < .5 ? -1 : 1) * (90 + Math.random() * 70)
+    };
+    if (reduce) { f.x = (innerWidth - w) / 2; f.y = (innerHeight - h) / 2; f.vx = f.vy = 0; }
+    place(f);
+    flyers.push(f);
+    playSound(sounds.overwatch);
+    var x = el.querySelector(".fly-x");
+    x.addEventListener("click", function () {
+      if (f.dodges < 3) {
+        f.dodges++;
+        x.textContent = DODGE_TEXT[f.dodges - 1];
+        // jump the X to a random spot on the ad and speed the ad up
+        x.style.left = Math.round(Math.random() * (f.w - 60)) + "px";
+        x.style.top = Math.round(Math.random() * (f.h - 30)) + "px";
+        x.style.right = "auto";
+        f.vx *= 1.35; f.vy *= 1.35;
+        if (f.dodges === 3) x.textContent = "X";
+        return;
+      }
+      removeAd(f);
+    });
+    if (!flyRaf) { flyLast = 0; flyRaf = requestAnimationFrame(flyStep); }
+  }
+  function place(f) { f.el.style.transform = "translate(" + Math.round(f.x) + "px," + Math.round(f.y) + "px)"; }
+  function removeAd(f) {
+    f.el.remove();
+    flyers = flyers.filter(function (g) { return g !== f; });
+  }
+  function clearAds() { flyers.slice().forEach(removeAd); }
+  function flyStep(ts) {
+    var dt = flyLast ? Math.min(.05, (ts - flyLast) / 1000) : 0;
+    flyLast = ts;
+    flyers.forEach(function (f) {
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      var maxX = Math.max(0, innerWidth - f.w), maxY = Math.max(0, innerHeight - f.h);
+      if (f.x < 0) { f.x = 0; f.vx = Math.abs(f.vx); } else if (f.x > maxX) { f.x = maxX; f.vx = -Math.abs(f.vx); }
+      if (f.y < 0) { f.y = 0; f.vy = Math.abs(f.vy); } else if (f.y > maxY) { f.y = maxY; f.vy = -Math.abs(f.vy); }
+      place(f);
+    });
+    flyRaf = flyers.length ? requestAnimationFrame(flyStep) : 0;
+  }
+
+  /* ---------- full-screen YouTube video ads ----------
+     built from the sidebar ads; pops up every 1-2.5 minutes. Not for the owner, not for "no popups" tags,
+     and never while you're on the FORUM or SHOUTBOX tab. The skip button waits 10s, then dodges a few times. */
+  var VADS = [].map.call(document.querySelectorAll("aside .ad-yt"), function (a) {
+    var img = a.querySelector("img"), b = a.querySelector("b");
+    return { href: a.href, img: img ? img.src.replace("mqdefault", "hqdefault") : "", title: b ? b.textContent : "" };
+  });
+  var vadIdx = Math.floor(Math.random() * (VADS.length || 1)), vadTimer = null, vadDodges = 0;
+  var DODGE_LINES = ["nice try", "almost!!", "too slow", "ok ok one more"];
+  function scheduleVideoAd(ms) {
+    setTimeout(function () { showVideoAd(); scheduleVideoAd(75000 + Math.random() * 75000); }, ms);
+  }
+  function showVideoAd() {
+    var u = user;
+    if (!VADS.length || document.hidden || !$("vad").hidden) return;
+    if ((u && u.owner) || perms().no_popups || currentTab !== "home") return;
+    if (document.querySelector(".modal:not([hidden])")) return; // another popup is up; catch them next round
+    var ad = VADS[vadIdx++ % VADS.length];
+    $("vad-link").href = $("vad-visit").href = ad.href;
+    $("vad-img").hidden = false;
+    $("vad-img").src = ad.img;
+    $("vad-title").textContent = ad.title;
+    vadDodges = 0;
+    var skip = $("vad-skip"), left = 10;
+    skip.disabled = true;
+    skip.style.cssText = "";
+    skip.textContent = "You can skip this ad in " + left;
+    $("vad-time").textContent = "0:" + (left < 10 ? "0" : "") + left;
+    $("vad-prog").style.width = "0%";
+    $("vad").hidden = false;
+    playSound(sounds.overwatch);
+    clearInterval(vadTimer);
+    vadTimer = setInterval(function () {
+      left--;
+      $("vad-prog").style.width = ((10 - left) * 10) + "%";
+      $("vad-time").textContent = "0:0" + Math.max(left, 0);
+      if (left > 0) { skip.textContent = "You can skip this ad in " + left; return; }
+      clearInterval(vadTimer);
+      skip.disabled = false;
+      skip.innerHTML = "Skip Ad &#9654;|";
+    }, 1000);
+  }
+  $("vad-img").addEventListener("error", function () { this.hidden = true; });
+  $("vad-skip").addEventListener("click", function () {
+    var b = this;
+    if (b.disabled) return;
+    if (vadDodges < DODGE_LINES.length) {
+      b.textContent = DODGE_LINES[vadDodges++] + " \u25B6|";
+      b.style.right = "auto"; b.style.bottom = "auto";
+      b.style.left = (8 + Math.random() * 60) + "vw";
+      b.style.top = (10 + Math.random() * 70) + "vh";
+      return;
+    }
+    $("vad").hidden = true;
+  });
+
   $("live-close").addEventListener("click", function () { $("live-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
@@ -297,6 +429,7 @@
     [].forEach.call(document.querySelectorAll("nav [data-tab]"), function (a) {
       a.classList.toggle("on", a.getAttribute("data-tab") === tab);
     });
+    if (tab !== "home") clearAds();
     if (changed && tab === "forum" && !forumThread) loadThreads();
     if (changed && tab === "board") loadBoard();
     var el = h && document.getElementById(h);
@@ -468,10 +601,14 @@
   /* ---------- accounts ---------- */
   function setUser(u) {
     user = u;
+    if (u && u.owner) clearAds();
     $("account-guest").hidden = !!u;
     $("account-user").hidden = !u;
     $("whoami").textContent = u ? u.name : "";
     $("whoami-tag").innerHTML = u && u.tag ? RJTag.html(u.tag) : "";
+    if (window.RJMusic) window.RJMusic.setAllowed(perms().can_music);
+    if (perms().no_popups || (u && u.owner)) $("vad").hidden = true;
+    if (perms().no_popups) [].forEach.call(document.querySelectorAll(".modal:not(#live-popup):not(#cart-modal):not(#register-modal)"), function (m) { m.hidden = true; });
     $("owner-link").hidden = !(u && u.owner);
     $("board-name-wrap").hidden = !!u;
     $("board-register").hidden = !!u;
@@ -492,7 +629,7 @@
   });
 
   $("logout-btn").addEventListener("click", function () {
-    api("logout", {}).then(function () { setUser(null); }).catch(function (err) { $("login-msg").textContent = err.message; });
+    api("logout", {}).then(function () { setUser(null); return api("me").then(function (d) { if (d.everyone) everyone = d.everyone; setUser(d.user); }); }).catch(function (err) { $("login-msg").textContent = err.message; });
   });
 
   $("register-open").addEventListener("click", function (e) { e.preventDefault(); $("register-msg").textContent = ""; $("register-modal").hidden = false; });
@@ -543,7 +680,7 @@
 
   route();
   setUser(null);
-  api("me").then(function (d) { setUser(d.user); }).catch(function () {});
+  api("me").then(function (d) { if (d.everyone) everyone = d.everyone; setUser(d.user); }).catch(function () {});
   loadBoard();
 
   /* ---------- sparkle cursor trail ---------- */

@@ -79,6 +79,8 @@
         <label class="poll"><input id="tag-hl" type="checkbox"> Highlight their posts</label>
         <label class="poll"><input id="tag-pin" type="checkbox"> Can pin threads</label>
         <label class="poll"><input id="tag-hlt" type="checkbox"> Can highlight threads</label>
+        <label class="poll"><input id="tag-music" type="checkbox" checked> Can pause / turn down music</label>
+        <label class="poll"><input id="tag-nopop" type="checkbox"> No popups or video ads</label>
         <div class="wide">
           <span class="tag-preview">Preview: <b>username</b> <span id="tag-preview"></span></span>
           <button class="btn small" id="tag-save" type="submit">CREATE TAG</button>
@@ -86,6 +88,12 @@
           <span class="tiny err" id="tag-msg"></span>
         </div>
       </form>
+      <div class="tag-form" id="everyone-form">
+        <b class="wide">EVERYONE ELSE (guests + members with no tag):</b>
+        <label class="poll"><input id="ev-music" type="checkbox"> Can pause / turn down music</label>
+        <label class="poll"><input id="ev-nopop" type="checkbox"> No popups or video ads</label>
+        <span class="tiny" id="ev-msg"></span>
+      </div>
       <div class="vtable-wrap">
         <table class="vtable">
           <thead><tr><th>Tag</th><th>Effect</th><th>Powers</th><th class="num">Members</th><th></th></tr></thead>
@@ -292,7 +300,8 @@
   function formTag() {
     return {
       label: $("tag-label").value.trim() || "TAG TEXT", color: $("tag-color").value, text_color: $("tag-text").value,
-      effect: $("tag-effect").value, highlight: $("tag-hl").checked, can_pin: $("tag-pin").checked, can_highlight: $("tag-hlt").checked
+      effect: $("tag-effect").value, highlight: $("tag-hl").checked, can_pin: $("tag-pin").checked, can_highlight: $("tag-hlt").checked,
+      can_music: $("tag-music").checked, no_popups: $("tag-nopop").checked
     };
   }
   function asView(t) { return { label: t.label, color: t.color, text: t.text_color, effect: t.effect }; }
@@ -302,6 +311,8 @@
     if (t.highlight) p.push("highlights posts");
     if (t.can_pin) p.push("can pin");
     if (t.can_highlight) p.push("can highlight threads");
+    p.push(t.can_music ? "music control" : "music locked");
+    if (t.no_popups) p.push("no popups");
     return p.join(", ") || "<span style=\"opacity:.5\">none</span>";
   }
   function effectName(e) { for (var i = 0; i < RJTag.EFFECTS.length; i++) if (RJTag.EFFECTS[i][0] === e) return RJTag.EFFECTS[i][1]; return e; }
@@ -314,7 +325,10 @@
     }).join("") : "<tr><td colspan=\"5\" class=\"tiny\">No tags yet. Make one above!</td></tr>";
   }
   function loadTags() {
-    return api("tags").then(function (d) { tags = d.tags || []; renderTags(); renderUsers(); })
+    return api("tags").then(function (d) {
+      tags = d.tags || []; renderTags(); renderUsers();
+      if (d.everyone) { $("ev-music").checked = d.everyone.can_music; $("ev-nopop").checked = d.everyone.no_popups; }
+    })
       .catch(function (e) { $("tag-msg").textContent = e.message; });
   }
   function resetForm() {
@@ -351,6 +365,7 @@
       editing = id;
       $("tag-label").value = t.label; $("tag-color").value = t.color; $("tag-text").value = t.text_color;
       $("tag-effect").value = t.effect; $("tag-hl").checked = !!t.highlight; $("tag-pin").checked = !!t.can_pin; $("tag-hlt").checked = !!t.can_highlight;
+      $("tag-music").checked = !!t.can_music; $("tag-nopop").checked = !!t.no_popups;
       $("tag-save").textContent = "SAVE CHANGES";
       $("tag-cancel").hidden = false;
       $("tag-msg").textContent = "Editing " + t.label;
@@ -373,6 +388,14 @@
       loadTags();
     }).catch(function (err) { ok.textContent = err.message; });
   });
+  function saveEveryone() {
+    $("ev-msg").textContent = "saving...";
+    apiPost("settings", { can_music: $("ev-music").checked, no_popups: $("ev-nopop").checked })
+      .then(function () { $("ev-msg").textContent = "saved!"; })
+      .catch(function (err) { $("ev-msg").textContent = err.message; });
+  }
+  $("ev-music").addEventListener("change", saveEveryone);
+  $("ev-nopop").addEventListener("change", saveEveryone);
   preview();
 
   api("me").then(function (d) {
