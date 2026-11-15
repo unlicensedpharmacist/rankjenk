@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-tab="home">
 
 <div id="splash">
   <div class="splash-box">
@@ -39,13 +39,13 @@
 </header>
 
 <nav>
-  <a class="btn" href="#shop">HOME</a>
+  <a class="btn" href="#home" data-tab="home">HOME</a>
   <a class="btn" href="#shop">SHOP</a>
   <a class="btn" href="#top10">TOP 10</a>
   <a class="btn" href="#reviews">REVIEWS</a>
   <a class="btn" href="recipes.html">RECIPES</a>
-  <a class="btn" href="#forum">FORUM</a>
-  <a class="btn" href="#board">SHOUTBOX</a>
+  <a class="btn tab" href="#forum" data-tab="forum">&#128172; FORUM</a>
+  <a class="btn tab" href="#board" data-tab="board">&#128227; SHOUTBOX</a>
   <a class="btn" href="#about">ABOUT</a>
   <a class="btn cart-btn" href="#" id="cart-open">&#128722; CART (<span id="cart-count">0</span>)</a>
 </nav>
@@ -65,7 +65,7 @@
           <p class="tiny"><a href="#" id="register-open">Register FREE!</a></p>
         </div>
         <div id="account-user" hidden>
-          <p>Welcome back,<br><b id="whoami"></b>!<br><span id="whoami-tag" class="owner-tag" hidden>&#9733; SITE OWNER &#9733;</span></p>
+          <p>Welcome back,<br><b id="whoami"></b>!<br><span id="whoami-tag"></span></p>
           <p class="tiny">You have <b>0</b> new messages and <b>0</b> friends.</p>
           <p id="owner-link" hidden><a class="btn small" href="owner.html">OWNER DASHBOARD</a></p>
           <button class="btn small" id="logout-btn" type="button">LOGOUT</button>
@@ -109,7 +109,7 @@
   </aside>
 
   <main>
-    <section class="box welcome">
+    <section id="home" class="box welcome">
       <h2 class="rainbow">~*~ Welcome To RankJenk!!! ~*~</h2>
       <p>Hello and welcome, fellow shopper! You have found the <b>internet's #1 rated</b> online store for jenkem. Browse our huge selection, read the reviews, and <span class="blink">vote for your favorites</span> on the leaderboard.</p>
       <p class="tiny"><b>Reminder:</b> this is a joke. Nothing here is real, nothing is for sale, and no payment is taken. Jenkem is an old internet hoax. Please do not huff anything.</p>
@@ -324,6 +324,17 @@
   </div>
 </div>
 
+<div id="live-popup" class="modal" hidden>
+  <div class="modal-box popup-box live-box">
+    <button class="x" id="live-close" type="button">X</button>
+    <p class="live-badge"><span class="live-dot"></span> LIVE NOW</p>
+    <h2 class="rainbow">BLINDDUDESGAME IS STREAMING!!!</h2>
+    <p id="live-title" class="live-title"></p>
+    <a class="btn big-btn" id="live-watch" href="https://www.youtube.com/@Blinddudesgame/live" target="_blank" rel="noopener">&#9654; WATCH THE STREAM</a>
+    <p class="tiny">youtube.com/@Blinddudesgame</p>
+  </div>
+</div>
+
 <div id="photo-popup" class="modal" hidden>
   <div class="modal-box popup-box photo-box">
     <button class="x" id="photo-close" type="button">X</button>
@@ -334,6 +345,7 @@
 </div>
 
 <script src="grime.js"></script>
+<script src="tags.js"></script>
 <script src="music.js"></script>
 <script src="script.js"></script>
 </body>

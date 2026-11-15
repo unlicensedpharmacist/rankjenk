@@ -18,7 +18,24 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_replies_thread ON replies (thread_id)",
   "CREATE TABLE IF NOT EXISTS visits (ip TEXT PRIMARY KEY, city TEXT, region TEXT, country TEXT, lat REAL, lon REAL, isp TEXT, ua TEXT, referrer TEXT, tz TEXT, lang TEXT, screen TEXT, viewport TEXT, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, hits INTEGER NOT NULL DEFAULT 1)",
   "CREATE INDEX IF NOT EXISTS idx_visits_last ON visits (last_seen)",
+  "CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, color TEXT NOT NULL, text_color TEXT NOT NULL, effect TEXT NOT NULL DEFAULT 'none', highlight INTEGER NOT NULL DEFAULT 0, can_pin INTEGER NOT NULL DEFAULT 0, can_highlight INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)",
 ];
+
+/* ---------- member tags ---------- */
+const EFFECTS = ["none", "sparkle", "glow", "fire", "glitch", "shine", "rainbow", "drip"];
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+// shown on the owner's posts until the owner gives themself a custom tag
+const OWNER_TAG = { label: "★ SITE OWNER ★", color: "#a01010", text: "#ffd23b", effect: "none", highlight: true };
+// columns pulled in alongside any post/user row: "LEFT JOIN users u ... LEFT JOIN tags g ON g.id = u.tag_id"
+const TAG_COLS = "g.label AS tag_label, g.color AS tag_color, g.text_color AS tag_text, g.effect AS tag_effect, g.highlight AS tag_hl";
+const TAG_JOIN = "LEFT JOIN tags g ON g.id = u.tag_id";
+
+function tagOf(r, owner) {
+  if (r.tag_label) {
+    return { label: r.tag_label, color: r.tag_color, text: r.tag_text, effect: r.tag_effect, highlight: !!r.tag_hl };
+  }
+  return owner ? OWNER_TAG : null;
+}
 
 const VISIT_DAYS = 30; // visitor log entries are deleted after this many days
 
@@ -53,9 +70,13 @@ async function logVisit(request, db, extra) {
 }
 
 // columns added after the visits table first shipped; ALTER is a no-op if already present
-const MIGRATIONS = ["referrer", "tz", "lang", "screen", "viewport"].map(
-  (c) => `ALTER TABLE visits ADD COLUMN ${c} TEXT`
-);
+const MIGRATIONS = ["referrer", "tz", "lang", "screen", "viewport"]
+  .map((c) => `ALTER TABLE visits ADD COLUMN ${c} TEXT`)
+  .concat([
+    "ALTER TABLE users ADD COLUMN tag_id INTEGER",
+    "ALTER TABLE threads ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE threads ADD COLUMN highlighted INTEGER NOT NULL DEFAULT 0",
+  ]);
 
 let schemaReady = null;
 function ensureSchema(db) {
@@ -102,9 +123,16 @@ function json(data, status = 200, cookie) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+const isOwner = (u) => !!u && u.name.toLowerCase() === OWNER_NAME;
+const canPin = (u) => isOwner(u) || !!(u && u.tag_pin);
+const canHighlight = (u) => isOwner(u) || !!(u && u.tag_hlt);
+
 function publicUser(u) {
-  return { name: u.name, owner: u.name.toLowerCase() === OWNER_NAME };
+  const owner = isOwner(u);
+  return { name: u.name, owner, tag: tagOf(u, owner), can_pin: canPin(u), can_highlight: canHighlight(u) };
 }
+
+const USER_COLS = "u.id, u.name, " + TAG_COLS + ", g.can_pin AS tag_pin, g.can_highlight AS tag_hlt";
 
 function readToken(request) {
   const m = (request.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + COOKIE + "=([a-f0-9]+)"));
@@ -124,7 +152,7 @@ async function currentUser(request, db) {
   const token = readToken(request);
   if (!token) return null;
   return db
-    .prepare("SELECT u.id, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires > ?")
+    .prepare(`SELECT ${USER_COLS} FROM sessions s JOIN users u ON u.id = s.user_id ${TAG_JOIN} WHERE s.token = ? AND s.expires > ?`)
     .bind(await sha256(token), now())
     .first();
 }
@@ -138,7 +166,22 @@ const multiLine = (s, max) => {
   return v.length >= 1 && v.length <= max ? v : null;
 };
 const hasLink = (s) => /https?:\/\/|www\./i.test(s);
-const flags = (r) => ({ ...r, guest: !!r.guest, owner: !!r.owner });
+function flags(r) {
+  const { tag_label, tag_color, tag_text, tag_effect, tag_hl, ...rest } = r;
+  const out = { ...rest, guest: !!r.guest, owner: !!r.owner };
+  out.tag = tagOf(r, out.owner);
+  if (r.pinned != null) out.pinned = !!r.pinned;
+  if (r.highlighted != null) out.highlighted = !!r.highlighted;
+  return out;
+}
+
+const asTag = (b) => {
+  const label = oneLine(b.label, 24);
+  if (!label) return { error: "Tag text must be 1-24 characters." };
+  if (!HEX_RE.test(b.color || "") || !HEX_RE.test(b.text_color || "")) return { error: "Pick the tag colors." };
+  if (!EFFECTS.includes(b.effect)) return { error: "Pick an effect." };
+  return { label, color: b.color, text_color: b.text_color, effect: b.effect, highlight: b.highlight ? 1 : 0, can_pin: b.can_pin ? 1 : 0, can_highlight: b.can_highlight ? 1 : 0 };
+};
 
 async function resolveAuthor(request, db, body) {
   const user = await currentUser(request, db);
@@ -169,6 +212,46 @@ async function rateLimited(db, ip, t) {
   return null;
 }
 
+/* ---------- is the YouTube channel live? ----------
+   /@handle/live turns into the live video's watch page while streaming; that page has "isLiveNow":true.
+   No API key needed. Result is cached for a couple of minutes so YouTube isn't hit on every page load. */
+const LIVE_CHANNEL = "Blinddudesgame";
+const LIVE_TTL = 120; // seconds
+let liveCache = { at: 0, data: null };
+
+async function youtubeLive() {
+  const t = now();
+  if (liveCache.data && t - liveCache.at < LIVE_TTL) return liveCache.data;
+  const channelUrl = `https://www.youtube.com/@${LIVE_CHANNEL}`;
+  let data = { live: false, channel: LIVE_CHANNEL, url: channelUrl + "/live" };
+  try {
+    const res = await fetch(channelUrl + "/live", {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+        "accept-language": "en-US,en;q=0.9",
+        // skip YouTube's cookie-consent page in some regions
+        cookie: "SOCS=CAI; CONSENT=YES+1",
+      },
+      cf: { cacheTtl: LIVE_TTL },
+    });
+    const html = await res.text();
+    if (/"isLiveNow"\s*:\s*true/.test(html)) {
+      const id = (html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/) || [])[1];
+      const title = (html.match(/<meta name="title" content="([^"]{1,200})"/) || [])[1] || "";
+      data = {
+        live: true,
+        channel: LIVE_CHANNEL,
+        url: id ? `https://www.youtube.com/watch?v=${id}` : channelUrl + "/live",
+        title: title.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'"),
+      };
+    }
+  } catch (e) {
+    // YouTube unreachable: report not live
+  }
+  liveCache = { at: t, data };
+  return data;
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
@@ -190,6 +273,8 @@ async function handleApi(request, env) {
       country: cf.country || "",
     });
   }
+
+  if (route === "live" && method === "GET") return json(await youtubeLive());
 
   const db = env.DB;
   if (!db) return json({ error: "The database is not connected yet." }, 503);
@@ -241,7 +326,7 @@ async function handleApi(request, env) {
       const name = String(body.username || "").trim();
       const password = String(body.password || "");
       const rec = await db
-        .prepare("SELECT id, name, pass FROM users WHERE name_lower = ?")
+        .prepare(`SELECT ${USER_COLS}, u.pass FROM users u ${TAG_JOIN} WHERE u.name_lower = ?`)
         .bind(name.toLowerCase())
         .first();
       const ok = rec ? await checkPassword(password, rec.pass) : (await hashPassword(password), false);
@@ -260,7 +345,7 @@ async function handleApi(request, env) {
       const [comments, count] = await db.batch([
         db
           .prepare(
-            "SELECT c.id, c.name, c.body, c.created, (c.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM comments c LEFT JOIN users u ON u.id = c.user_id ORDER BY c.id DESC LIMIT 50"
+            `SELECT c.id, c.name, c.body, c.created, (c.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner, ${TAG_COLS} FROM comments c LEFT JOIN users u ON u.id = c.user_id ${TAG_JOIN} ORDER BY c.id DESC LIMIT 50`
           )
           .bind(OWNER_NAME),
         db.prepare("SELECT COUNT(*) AS n FROM users"),
@@ -289,9 +374,9 @@ async function handleApi(request, env) {
       const cat = url.searchParams.get("cat");
       const filtered = CATEGORIES.includes(cat);
       const stmt = db.prepare(
-        "SELECT t.id, t.title, t.category, t.name, t.created, t.last_activity, t.replies, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM threads t LEFT JOIN users u ON u.id = t.user_id " +
+        `SELECT t.id, t.title, t.category, t.name, t.created, t.last_activity, t.replies, t.pinned, t.highlighted, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner, ${TAG_COLS} FROM threads t LEFT JOIN users u ON u.id = t.user_id ${TAG_JOIN} ` +
           (filtered ? "WHERE t.category = ? " : "") +
-          "ORDER BY t.last_activity DESC LIMIT 40"
+          "ORDER BY t.pinned DESC, t.last_activity DESC LIMIT 40"
       );
       const res = await (filtered ? stmt.bind(OWNER_NAME, cat) : stmt.bind(OWNER_NAME)).all();
       return json({ threads: res.results.map(flags) });
@@ -303,12 +388,12 @@ async function handleApi(request, env) {
       const [t, r] = await db.batch([
         db
           .prepare(
-            "SELECT t.id, t.title, t.category, t.name, t.body, t.created, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM threads t LEFT JOIN users u ON u.id = t.user_id WHERE t.id = ?"
+            `SELECT t.id, t.title, t.category, t.name, t.body, t.created, t.pinned, t.highlighted, (t.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner, ${TAG_COLS} FROM threads t LEFT JOIN users u ON u.id = t.user_id ${TAG_JOIN} WHERE t.id = ?`
           )
           .bind(OWNER_NAME, id),
         db
           .prepare(
-            "SELECT r.id, r.name, r.body, r.created, (r.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner FROM replies r LEFT JOIN users u ON u.id = r.user_id WHERE r.thread_id = ? ORDER BY r.id ASC LIMIT 300"
+            `SELECT r.id, r.name, r.body, r.created, (r.user_id IS NULL) AS guest, (u.name_lower = ?) AS owner, ${TAG_COLS} FROM replies r LEFT JOIN users u ON u.id = r.user_id ${TAG_JOIN} WHERE r.thread_id = ? ORDER BY r.id ASC LIMIT 300`
           )
           .bind(OWNER_NAME, id),
       ]);
@@ -375,15 +460,85 @@ async function handleApi(request, env) {
       if (!user || user.name.toLowerCase() !== OWNER_NAME) return json({ error: "Owner only." }, 403);
       const { results } = await db
         .prepare(
-          "SELECT u.id, u.name, u.created, " +
+          "SELECT u.id, u.name, u.created, u.tag_id, " +
             "(SELECT COUNT(*) FROM comments c WHERE c.user_id = u.id) + " +
             "(SELECT COUNT(*) FROM threads t WHERE t.user_id = u.id) + " +
             "(SELECT COUNT(*) FROM replies r WHERE r.user_id = u.id) AS posts " +
             "FROM users u ORDER BY u.id ASC LIMIT 2000"
         )
         .all();
-      const users = results.map((u) => ({ id: u.id, name: u.name, created: u.created, posts: u.posts, owner: u.name.toLowerCase() === OWNER_NAME }));
+      const users = results.map((u) => ({ id: u.id, name: u.name, created: u.created, posts: u.posts, tag_id: u.tag_id, owner: u.name.toLowerCase() === OWNER_NAME }));
       return json({ users });
+    }
+
+    if (route === "threadflag" && method === "POST") {
+      const user = await currentUser(request, db);
+      const id = Number(body.id);
+      const flag = body.flag;
+      if (!Number.isInteger(id) || (flag !== "pinned" && flag !== "highlighted")) return json({ error: "Bad request." }, 400);
+      const allowed = flag === "pinned" ? canPin(user) : canHighlight(user);
+      if (!allowed) return json({ error: "Your tag can't do that." }, 403);
+      const res = await db.prepare(`UPDATE threads SET ${flag} = ? WHERE id = ?`).bind(body.on ? 1 : 0, id).run();
+      if (!res.meta.changes) return json({ error: "That thread does not exist." }, 404);
+      return json({ ok: true });
+    }
+
+    if (route === "tags" && method === "GET") {
+      const user = await currentUser(request, db);
+      if (!isOwner(user)) return json({ error: "Owner only." }, 403);
+      const { results } = await db
+        .prepare("SELECT g.*, (SELECT COUNT(*) FROM users u WHERE u.tag_id = g.id) AS members FROM tags g ORDER BY g.id ASC")
+        .all();
+      return json({ tags: results, effects: EFFECTS });
+    }
+
+    if (route === "tags" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!isOwner(user)) return json({ error: "Owner only." }, 403);
+      const t = asTag(body);
+      if (t.error) return json({ error: t.error }, 400);
+      const vals = [t.label, t.color, t.text_color, t.effect, t.highlight, t.can_pin, t.can_highlight];
+      if (body.id != null) {
+        const id = Number(body.id);
+        if (!Number.isInteger(id)) return json({ error: "Bad request." }, 400);
+        const res = await db
+          .prepare("UPDATE tags SET label = ?, color = ?, text_color = ?, effect = ?, highlight = ?, can_pin = ?, can_highlight = ? WHERE id = ?")
+          .bind(...vals, id)
+          .run();
+        if (!res.meta.changes) return json({ error: "No such tag." }, 404);
+        return json({ ok: true, id });
+      }
+      const res = await db
+        .prepare("INSERT INTO tags (label, color, text_color, effect, highlight, can_pin, can_highlight, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(...vals, now())
+        .run();
+      return json({ ok: true, id: res.meta.last_row_id }, 201);
+    }
+
+    if (route === "tagdelete" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!isOwner(user)) return json({ error: "Owner only." }, 403);
+      const id = Number(body.id);
+      if (!Number.isInteger(id)) return json({ error: "Bad request." }, 400);
+      await db.batch([
+        db.prepare("UPDATE users SET tag_id = NULL WHERE tag_id = ?").bind(id),
+        db.prepare("DELETE FROM tags WHERE id = ?").bind(id),
+      ]);
+      return json({ ok: true });
+    }
+
+    if (route === "usertag" && method === "POST") {
+      const user = await currentUser(request, db);
+      if (!isOwner(user)) return json({ error: "Owner only." }, 403);
+      const id = Number(body.id);
+      const tagId = body.tag_id == null || body.tag_id === "" ? null : Number(body.tag_id);
+      if (!Number.isInteger(id) || (tagId !== null && !Number.isInteger(tagId))) return json({ error: "Bad request." }, 400);
+      if (tagId !== null && !(await db.prepare("SELECT 1 AS x FROM tags WHERE id = ?").bind(tagId).first())) {
+        return json({ error: "No such tag." }, 404);
+      }
+      const res = await db.prepare("UPDATE users SET tag_id = ? WHERE id = ?").bind(tagId, id).run();
+      if (!res.meta.changes) return json({ error: "No such user." }, 404);
+      return json({ ok: true });
     }
 
     if (route === "setpassword" && method === "POST") {

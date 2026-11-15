@@ -69,6 +69,7 @@
     setTimeout(showIpPopup, 20000);
     setTimeout(showSocialPopup, 26000);
     setTimeout(function () { $("photo-popup").hidden = false; }, 34000);
+    setTimeout(checkLive, 5000);
     randomOverwatch();
   }
 
@@ -158,6 +159,24 @@
     }, 35);
   }
   $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); stopAlarm(); $("ip-popup").hidden = true; });
+
+  /* live popup: shows once per visit if @Blinddudesgame is streaming on YouTube.
+     The server checks YouTube (cached a couple of minutes); we re-check every 2 minutes. */
+  var liveShown = false, liveTimer = null;
+  function checkLive() {
+    if (liveShown) return;
+    api("live").then(function (d) {
+      if (!d.live) return;
+      liveShown = true;
+      clearInterval(liveTimer);
+      $("live-watch").href = d.url;
+      $("live-title").textContent = d.title || "";
+      $("live-popup").hidden = false;
+      playSound(sounds.overwatch);
+    }).catch(function () {});
+    if (!liveTimer) liveTimer = setInterval(function () { if (!document.hidden) checkLive(); }, 120000);
+  }
+  $("live-close").addEventListener("click", function () { $("live-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
   $("photo-close").addEventListener("click", function () { $("photo-popup").hidden = true; });
@@ -266,14 +285,38 @@
     $("checkout-msg").textContent = ERRORS[Math.floor(Math.random() * ERRORS.length)];
   });
 
+  /* ---------- top tabs: HOME / FORUM / SHOUTBOX ----------
+     #forum and #board show only that section; any other link (#shop, #about...) goes to HOME */
+  var TABS = { forum: 1, board: 1 }, currentTab = "home";
+  function route() {
+    var h = location.hash.slice(1);
+    var tab = TABS[h] ? h : "home";
+    var changed = tab !== currentTab;
+    currentTab = tab;
+    document.body.setAttribute("data-tab", tab);
+    [].forEach.call(document.querySelectorAll("nav [data-tab]"), function (a) {
+      a.classList.toggle("on", a.getAttribute("data-tab") === tab);
+    });
+    if (changed && tab === "forum" && !forumThread) loadThreads();
+    if (changed && tab === "board") loadBoard();
+    var el = h && document.getElementById(h);
+    if (el) el.scrollIntoView();
+  }
+  window.addEventListener("hashchange", route);
+
   /* ---------- forum ---------- */
   var CATS = ["General", "Product Reviews", "Recipes", "Gaming", "Off Topic"];
-  var forumCat = "", forumThread = 0, lastOwner = false;
+  var forumCat = "", forumThread = 0, lastPowers = "";
 
   function when(sec) { return new Date(sec * 1000).toLocaleString(); }
   function badges(p) {
-    return (p.owner ? ' <span class="owner-tag">&#9733; SITE OWNER &#9733;</span>' : '') +
+    return (p.tag ? ' ' + RJTag.html(p.tag) : '') +
       (p.guest ? ' <span class="tiny">(guest)</span>' : '');
+  }
+  /* class + inline color for posts whose author's tag highlights them */
+  function postClass(base, p) {
+    var h = RJTag.hl(p.tag);
+    return 'class="' + base + (p.owner ? ' owner' : '') + h.cls + '"' + h.style;
   }
   function delBtn(kind, id) {
     return user && user.owner
@@ -281,7 +324,7 @@
       : '';
   }
   function postHtml(p, kind) {
-    return '<div class="fpost' + (p.owner ? ' owner' : '') + '"><div class="fpost-head"><b>' + esc(p.name) + '</b>' +
+    return '<div ' + postClass("fpost", p) + '><div class="fpost-head"><b>' + esc(p.name) + '</b>' +
       badges(p) + ' <span class="tiny">' + esc(when(p.created)) + '</span>' + delBtn(kind, p.id) +
       '</div><div class="fpost-body">' + esc(p.body) + '</div></div>';
   }
@@ -295,7 +338,10 @@
     api("threads" + (forumCat ? "?cat=" + encodeURIComponent(forumCat) : "")).then(function (d) {
       $("forum-threads").innerHTML = d.threads.length
         ? d.threads.map(function (t) {
-            return '<tr><td><a href="#" class="thread-link" data-id="' + t.id + '">' + esc(t.title) + '</a></td>' +
+            var cls = (t.pinned ? ' pinned' : '') + (t.highlighted ? ' hlt' : '');
+            return '<tr' + (cls ? ' class="' + cls.slice(1) + '"' : '') + '><td>' +
+              (t.pinned ? '<span class="pin-icon" title="Pinned">&#128204;</span>' : '') +
+              '<a href="#" class="thread-link" data-id="' + t.id + '">' + esc(t.title) + '</a></td>' +
               '<td>' + esc(t.category) + '</td>' +
               '<td><b>' + esc(t.name) + '</b>' + badges(t) + '</td>' +
               '<td class="num">' + t.replies + '</td>' +
@@ -319,9 +365,14 @@
     $("forum-thread-view").hidden = false;
     $("forum-thread").innerHTML = '<p class="tiny">Loading...</p>';
     api("thread?id=" + id).then(function (d) {
+      var t = d.thread, tools = "";
+      if (user && user.can_pin) tools += '<button class="btn small tflag" type="button" data-flag="pinned" data-on="' + (t.pinned ? 0 : 1) + '">' + (t.pinned ? 'UNPIN' : '&#128204; PIN THREAD') + '</button>';
+      if (user && user.can_highlight) tools += '<button class="btn small tflag" type="button" data-flag="highlighted" data-on="' + (t.highlighted ? 0 : 1) + '">' + (t.highlighted ? 'UN-HIGHLIGHT' : '&#10024; HIGHLIGHT THREAD') + '</button>';
       $("forum-thread").innerHTML =
-        '<h3 class="thread-title">' + esc(d.thread.title) + '</h3>' +
-        '<p class="tiny">in ' + esc(d.thread.category) + ' | ' + d.replies.length + ' ' + (d.replies.length === 1 ? 'reply' : 'replies') + '</p>' +
+        '<h3 class="thread-title">' + (t.pinned ? '&#128204; ' : '') + esc(t.title) + '</h3>' +
+        '<p class="tiny">in ' + esc(t.category) + ' | ' + d.replies.length + ' ' + (d.replies.length === 1 ? 'reply' : 'replies') +
+        (t.pinned ? ' | pinned' : '') + (t.highlighted ? ' | highlighted' : '') + '</p>' +
+        (tools ? '<div class="thread-flags">' + tools + '</div>' : '') +
         postHtml(d.thread, "thread") +
         d.replies.map(function (r) { return postHtml(r, "reply"); }).join("");
     }).catch(function (err) { $("forum-thread").innerHTML = '<p class="err">' + esc(err.message) + '</p>'; });
@@ -330,9 +381,9 @@
   function forumUserChanged() {
     $("forum-name-wrap").hidden = !!user;
     $("forum-rname-wrap").hidden = !!user;
-    var owner = !!(user && user.owner);
-    if (owner !== lastOwner) {
-      lastOwner = owner;
+    var powers = user ? [user.owner, user.can_pin, user.can_highlight].join() : "";
+    if (powers !== lastPowers) {
+      lastPowers = powers;
       loadBoard();
       if (forumThread) openThread(forumThread);
     }
@@ -385,6 +436,15 @@
       .then(function () { btn.disabled = false; });
   });
 
+  $("forum-thread").addEventListener("click", function (e) {
+    var b = e.target.closest(".tflag");
+    if (!b) return;
+    b.disabled = true;
+    api("threadflag", { id: forumThread, flag: b.getAttribute("data-flag"), on: b.getAttribute("data-on") === "1" })
+      .then(function () { openThread(forumThread); })
+      .catch(function (err) { b.disabled = false; b.textContent = err.message; });
+  });
+
   document.addEventListener("click", function (e) {
     var b = e.target;
     if (!b.classList || !b.classList.contains("del")) return;
@@ -402,7 +462,7 @@
     }).catch(function (err) { b.textContent = err.message; });
   });
 
-  setInterval(function () { if (!document.hidden && !forumThread) loadThreads(); }, 30000);
+  setInterval(function () { if (!document.hidden && !forumThread && currentTab === "forum") loadThreads(); }, 30000);
   loadThreads();
 
   /* ---------- accounts ---------- */
@@ -411,7 +471,7 @@
     $("account-guest").hidden = !!u;
     $("account-user").hidden = !u;
     $("whoami").textContent = u ? u.name : "";
-    $("whoami-tag").hidden = !(u && u.owner);
+    $("whoami-tag").innerHTML = u && u.tag ? RJTag.html(u.tag) : "";
     $("owner-link").hidden = !(u && u.owner);
     $("board-name-wrap").hidden = !!u;
     $("board-register").hidden = !!u;
@@ -459,9 +519,7 @@
       $("member-count").textContent = d.members;
       $("board-list").innerHTML = d.posts.length
         ? d.posts.map(function (p) {
-            return '<div class="post' + (p.owner ? ' owner' : '') + '"><b>' + esc(p.name) + '</b>' +
-              (p.owner ? ' <span class="owner-tag">&#9733; SITE OWNER &#9733;</span>' : '') +
-              (p.guest ? ' <span class="tiny">(guest)</span>' : '') + ' <span class="tiny">' +
+            return '<div ' + postClass("post", p) + '><b>' + esc(p.name) + '</b>' + badges(p) + ' <span class="tiny">' +
               esc(new Date(p.created * 1000).toLocaleString()) + '</span>' + delBtn("comment", p.id) + '<br>' + esc(p.body) + '</div>';
           }).join("")
         : '<p class="tiny">No posts yet. Be the first!</p>';
@@ -483,6 +541,7 @@
   });
   setInterval(function () { if (!document.hidden) loadBoard(); }, 30000);
 
+  route();
   setUser(null);
   api("me").then(function (d) { setUser(d.user); }).catch(function () {});
   loadBoard();
