@@ -259,7 +259,19 @@
     var img = a.querySelector("img"), b = a.querySelector("b");
     return { href: a.href, img: img ? img.src.replace("mqdefault", "hqdefault") : "", title: b ? b.textContent : "" };
   });
-  var vadIdx = Math.floor(Math.random() * (VADS.length || 1)), vadTimer = null, vadDodges = 0;
+  /* add every video from youtube.com/roostercs (the server reads the channel), shuffled */
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  api("videos").then(function (d) {
+    var have = {};
+    VADS.forEach(function (v) { var m = v.href.match(/v=([\w-]{11})/); if (m) have[m[1]] = 1; });
+    (d.videos || []).forEach(function (v) {
+      if (have[v.id]) return;
+      have[v.id] = 1;
+      VADS.push({ href: "https://www.youtube.com/watch?v=" + v.id, img: "https://i.ytimg.com/vi/" + v.id + "/hqdefault.jpg", title: v.title || "NEW VIDEO FROM UNLICENSEDPHARMACIST!!!" });
+    });
+    shuffle(VADS);
+  }).catch(function () {});
+  var vadIdx = 0, vadTimer = null, vadDodges = 0;
   var DODGE_LINES = ["nice try", "almost!!", "too slow", "ok ok one more"];
   function scheduleVideoAd(ms) {
     setTimeout(function () { showVideoAd(); scheduleVideoAd(75000 + Math.random() * 75000); }, ms);

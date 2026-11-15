@@ -270,6 +270,46 @@ async function youtubeLive() {
   return data;
 }
 
+/* ---------- the owner's YouTube videos (for the full-screen video ads) ----------
+   Reads youtube.com/roostercs/videos (newest ~30) plus the channel's RSS feed (newest 15), no API key.
+   Cached for an hour. */
+const VIDEO_CHANNEL = "https://www.youtube.com/roostercs";
+const VIDEOS_TTL = 3600;
+let videosCache = { at: 0, data: null };
+const YT_HEADERS = {
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+  "accept-language": "en-US,en;q=0.9",
+  cookie: "SOCS=CAI; CONSENT=YES+1",
+};
+const jsonStr = (raw) => { try { return JSON.parse('"' + raw + '"'); } catch (e) { return raw; } };
+const xmlText = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+
+async function channelVideos() {
+  const t = now();
+  if (videosCache.data && t - videosCache.at < VIDEOS_TTL) return videosCache.data;
+  const found = new Map(); // id -> title
+  const add = (id, title) => { if (id && !found.has(id)) found.set(id, (title || "").slice(0, 200)); else if (id && title && !found.get(id)) found.set(id, title.slice(0, 200)); };
+  let channelId = "";
+  try {
+    const html = await (await fetch(VIDEO_CHANNEL + "/videos", { headers: YT_HEADERS })).text();
+    channelId = (html.match(/"(?:externalId|channelId)":"(UC[\w-]{22})"/) || [])[1] || "";
+    // classic layout: "videoRenderer":{"videoId":"...", ... "title":{"runs":[{"text":"..."}
+    for (const m of html.matchAll(/"videoRenderer":\{"videoId":"([\w-]{11})"[\s\S]{0,1500}?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g)) add(m[1], jsonStr(m[2]));
+    // newer layout: lockupViewModel with contentId + metadata title
+    for (const m of html.matchAll(/"lockupViewModel":\{[\s\S]{0,4000}?"title":\{"content":"((?:[^"\\]|\\.)*)"[\s\S]{0,4000}?"contentId":"([\w-]{11})"/g)) add(m[2], jsonStr(m[1]));
+  } catch (e) {}
+  try {
+    if (channelId) {
+      const xml = await (await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, { headers: YT_HEADERS })).text();
+      for (const m of xml.matchAll(/<yt:videoId>([\w-]{11})<\/yt:videoId>[\s\S]*?<title>([^<]*)<\/title>/g)) add(m[1], xmlText(m[2]));
+    }
+  } catch (e) {}
+  const data = { videos: [...found].map(([id, title]) => ({ id, title })) };
+  // only cache a good result for the full hour; retry sooner if YouTube gave us nothing
+  videosCache = { at: data.videos.length ? t : t - VIDEOS_TTL + 300, data };
+  return data;
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
@@ -293,6 +333,7 @@ async function handleApi(request, env) {
   }
 
   if (route === "live" && method === "GET") return json(await youtubeLive());
+  if (route === "videos" && method === "GET") return json(await channelVideos());
 
   const db = env.DB;
   if (!db) return json({ error: "The database is not connected yet." }, 503);
