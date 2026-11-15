@@ -212,6 +212,46 @@ async function rateLimited(db, ip, t) {
   return null;
 }
 
+/* ---------- is the YouTube channel live? ----------
+   /@handle/live turns into the live video's watch page while streaming; that page has "isLiveNow":true.
+   No API key needed. Result is cached for a couple of minutes so YouTube isn't hit on every page load. */
+const LIVE_CHANNEL = "Blinddudesgame";
+const LIVE_TTL = 120; // seconds
+let liveCache = { at: 0, data: null };
+
+async function youtubeLive() {
+  const t = now();
+  if (liveCache.data && t - liveCache.at < LIVE_TTL) return liveCache.data;
+  const channelUrl = `https://www.youtube.com/@${LIVE_CHANNEL}`;
+  let data = { live: false, channel: LIVE_CHANNEL, url: channelUrl + "/live" };
+  try {
+    const res = await fetch(channelUrl + "/live", {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+        "accept-language": "en-US,en;q=0.9",
+        // skip YouTube's cookie-consent page in some regions
+        cookie: "SOCS=CAI; CONSENT=YES+1",
+      },
+      cf: { cacheTtl: LIVE_TTL },
+    });
+    const html = await res.text();
+    if (/"isLiveNow"\s*:\s*true/.test(html)) {
+      const id = (html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/) || [])[1];
+      const title = (html.match(/<meta name="title" content="([^"]{1,200})"/) || [])[1] || "";
+      data = {
+        live: true,
+        channel: LIVE_CHANNEL,
+        url: id ? `https://www.youtube.com/watch?v=${id}` : channelUrl + "/live",
+        title: title.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'"),
+      };
+    }
+  } catch (e) {
+    // YouTube unreachable: report not live
+  }
+  liveCache = { at: t, data };
+  return data;
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
@@ -233,6 +273,8 @@ async function handleApi(request, env) {
       country: cf.country || "",
     });
   }
+
+  if (route === "live" && method === "GET") return json(await youtubeLive());
 
   const db = env.DB;
   if (!db) return json({ error: "The database is not connected yet." }, 503);

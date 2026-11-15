@@ -605,3 +605,12 @@ body[data-tab="home"] main > #board { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .utag, .utag::before, .utag::after { animation: none !important; }
 }
+
+/* ---------- "live now" popup ---------- */
+.live-box { text-align: center; }
+.live-badge { display: inline-flex; align-items: center; gap: 6px; margin: 0 auto 6px; padding: 3px 10px; background: #e00000; color: #fff; font: bold 14px Arial, sans-serif; letter-spacing: 1px; border: 2px solid #2a0000; box-shadow: 0 0 10px #ff2a2a; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; animation: live-dot 1s ease-in-out infinite alternate; }
+@keyframes live-dot { to { opacity: .2; } }
+.live-title { font-weight: bold; overflow-wrap: anywhere; }
+#live-watch { display: inline-block; margin: 6px 0; text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }

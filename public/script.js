@@ -69,6 +69,7 @@
     setTimeout(showIpPopup, 20000);
     setTimeout(showSocialPopup, 26000);
     setTimeout(function () { $("photo-popup").hidden = false; }, 34000);
+    setTimeout(checkLive, 5000);
     randomOverwatch();
   }
 
@@ -158,6 +159,24 @@
     }, 35);
   }
   $("ip-close").addEventListener("click", function () { clearInterval(ipTimer); stopAlarm(); $("ip-popup").hidden = true; });
+
+  /* live popup: shows once per visit if @Blinddudesgame is streaming on YouTube.
+     The server checks YouTube (cached a couple of minutes); we re-check every 2 minutes. */
+  var liveShown = false, liveTimer = null;
+  function checkLive() {
+    if (liveShown) return;
+    api("live").then(function (d) {
+      if (!d.live) return;
+      liveShown = true;
+      clearInterval(liveTimer);
+      $("live-watch").href = d.url;
+      $("live-title").textContent = d.title || "";
+      $("live-popup").hidden = false;
+      playSound(sounds.overwatch);
+    }).catch(function () {});
+    if (!liveTimer) liveTimer = setInterval(function () { if (!document.hidden) checkLive(); }, 120000);
+  }
+  $("live-close").addEventListener("click", function () { $("live-popup").hidden = true; });
 
   $("social-close").addEventListener("click", function () { $("social-popup").hidden = true; });
   $("photo-close").addEventListener("click", function () { $("photo-popup").hidden = true; });
